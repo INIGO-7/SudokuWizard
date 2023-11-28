@@ -86,15 +86,11 @@ def get_sudoku_squares(thresh, puzzle, debug=False):
     vertical_kernel = cv.getStructuringElement(cv.MORPH_RECT, (1, 3))
     thresh = cv.morphologyEx(thresh, cv.MORPH_CLOSE, vertical_kernel, iterations=10)
 
-    if debug:
-        cv.imshow("thresh_img_vertkernel", thresh)
-        cv.waitKey(0)
-
     horizontal_kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 1))
     thresh = cv.morphologyEx(thresh, cv.MORPH_CLOSE, horizontal_kernel, iterations=10)
 
     if debug:
-        cv.imshow("thresh_img_horizkernel", thresh)
+        cv.imshow("horizontal an vertical lines fixed", thresh)
         cv.waitKey(0)
 
     # Sort by top to bottom and each row by left to right
@@ -128,15 +124,41 @@ def get_sudoku_squares(thresh, puzzle, debug=False):
     return (invert, thresh, sudoku_boxes)
 
 # Load image
-image = cv.imread('res/photos/sudokuLibro1.jpeg')
+image = cv.imread('res/photos/sudoku/sudokuLibro1.jpeg')
+templates = [cv.imread(f'res/photos/numbers/number{i}.jpeg') for i in range(1, 10)]
 
 cv.imshow("original_image", image)
 cv.waitKey(0)
 
-puzzle, thresh = find_puzzle(image, debug=True)
+puzzle, thresh = find_puzzle(image, debug=False)
 
-invert, new_thresh, results = get_sudoku_squares(thresh, puzzle, debug=True)
+invert, new_thresh, results = get_sudoku_squares(thresh, puzzle, debug=False)
 
-for r in results:
-    cv.imshow("result", r)
-    cv.waitKey(0)
+def get_number(img, templates):
+
+    # con umbralización del color
+    gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+    _, thresh = cv.threshold(gray, 100, 255, cv.THRESH_BINARY)
+
+    if np.all(thresh == 255):
+        return 0
+    else:
+        results = {'1':0, '2':0, '3':0, '4':0, '5':0, '6':0, '7':0, '8':0, '9':0}
+
+        for idx, template in enumerate(templates):
+            result = cv.matchTemplate(img, template, cv.TM_CCOEFF_NORMED)
+            # Find the position of the best match
+            _, max_val, _, _ = cv.minMaxLoc(result)
+            results[idx + 1] = max_val
+        
+        return max(results, key=results.get)
+
+sudoku_arr = []
+for cell in results:
+    sudoku_arr.append(get_number(cell, templates))
+
+print(np.array(sudoku_arr).reshape(9, 9))
+
+# HACER RESHAPE DEL ARRAY
+
+# METER A DATAFRAME DE PANDAS
