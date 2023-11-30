@@ -125,7 +125,7 @@ def get_sudoku_squares(thresh, puzzle, debug=False):
 
 # Load image
 image = cv.imread('res/photos/sudoku/sudokuLibro1.jpeg')
-templates = [cv.imread(f'res/photos/numbers/number{i}.jpeg') for i in range(1, 10)]
+templates = [cv.imread(f'res/photos/numbers/number{i}HQ.jpg') for i in range(1, 10)]
 
 cv.imshow("original_image", image)
 cv.waitKey(0)
@@ -143,18 +143,30 @@ def get_number(img, templates):
     if np.all(thresh == 255):
         return 0
     else:
-        results = {'1':0, '2':0, '3':0, '4':0, '5':0, '6':0, '7':0, '8':0, '9':0}
+        results = []#{'1':0, '2':0, '3':0, '4':0, '5':0, '6':0, '7':0, '8':0, '9':0}
 
         for idx, template in enumerate(templates):
+
+            target_height, target_width = img.shape[:2]
+
+            #MAL, HAY QUE CROPEAR EL NÚMERO Y LUEGO YA SE HACE RESIZE!
+
+            template = cv.resize(template, (target_width, target_height))
+
+            img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+            template = cv.cvtColor(template, cv.COLOR_BGR2GRAY)
+
             result = cv.matchTemplate(img, template, cv.TM_CCOEFF_NORMED)
             # Find the position of the best match
             _, max_val, _, _ = cv.minMaxLoc(result)
-            results[idx + 1] = max_val
+            #results[idx + 1] = max_val
+            results.append(max_val)
         
-        return max(results, key=results.get)
+        return results.index(max(results)) + 1
 
 sudoku_arr = []
 for cell in results:
+
     sudoku_arr.append(get_number(cell, templates))
 
 print(np.array(sudoku_arr).reshape(9, 9))
