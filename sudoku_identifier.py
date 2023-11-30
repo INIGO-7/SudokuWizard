@@ -111,50 +111,71 @@ def get_sudoku_squares(thresh, puzzle, debug=False):
                 row = []
 
     # Iterate through each box
-    sudoku_boxes = []
+    sudoku_cells = []
+    sudoku_cells_thresh = []
 
     for row in sudoku_rows:
         for c in row:
+
             mask = np.zeros(puzzle.shape, dtype=np.uint8)
             cv.drawContours(mask, [c], -1, (255,255,255), -1)
+            sudoku_cells_thresh.append(mask)
+
             result = cv.bitwise_and(puzzle, mask)
             result[mask==0] = 255
-            sudoku_boxes.append(result)
+            sudoku_cells.append(result)
     
-    return (invert, thresh, sudoku_boxes)
+    return (thresh, sudoku_cells, sudoku_cells_thresh)
 
-# Load image
-image = cv.imread('res/photos/sudoku/sudokuLibro1.jpeg')
-templates = [cv.imread(f'res/photos/numbers/number{i}HQ.jpg') for i in range(1, 10)]
 
-cv.imshow("original_image", image)
-cv.waitKey(0)
+def process_cell(cell, cell_thresh):
 
-puzzle, thresh = find_puzzle(image, debug=False)
+    # Find white pixels
+    white_pixels = np.where(cell_thresh == 255)
+    if white_pixels[0].size > 0 and white_pixels[1].size > 0:
+        # find 
+        topmost = np.min(white_pixels[0])
+        bottommost = np.max(white_pixels[0])
+        leftmost = np.min(white_pixels[1])
+        rightmost = np.max(white_pixels[1])
 
-invert, new_thresh, results = get_sudoku_squares(thresh, puzzle, debug=False)
+        return cell[topmost:bottommost+1, leftmost:rightmost+1] #sum one because python slicing goes to init:end-1
+    
+    return None
+
 
 def get_number(img, templates):
 
     # con umbralización del color
     gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
     _, thresh = cv.threshold(gray, 100, 255, cv.THRESH_BINARY)
+    
+    if len(img.shape) == 3:
+        img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+    _, img = cv.threshold(img, 127, 255, cv.THRESH_BINARY)
+    img = cv.bitwise_not(img)
 
     if np.all(thresh == 255):
         return 0
     else:
-        results = []#{'1':0, '2':0, '3':0, '4':0, '5':0, '6':0, '7':0, '8':0, '9':0}
+        results = []
 
         for idx, template in enumerate(templates):
 
             target_height, target_width = img.shape[:2]
 
-            #MAL, HAY QUE CROPEAR EL NÚMERO Y LUEGO YA SE HACE RESIZE!
-
             template = cv.resize(template, (target_width, target_height))
 
-            img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
-            template = cv.cvtColor(template, cv.COLOR_BGR2GRAY)
+            cv.imshow("img threshed", img)
+            cv.waitKey(0)
+
+            if len(template.shape) == 3:
+                template = cv.cvtColor(template, cv.COLOR_BGR2GRAY)
+            _, template = cv.threshold(template, 127, 255, cv.THRESH_BINARY)
+            template = cv.bitwise_not(template)
+
+            cv.imshow("template threshed", template)
+            cv.waitKey(0)
 
             result = cv.matchTemplate(img, template, cv.TM_CCOEFF_NORMED)
             # Find the position of the best match
@@ -164,8 +185,25 @@ def get_number(img, templates):
         
         return results.index(max(results)) + 1
 
+
+# Load image
+image = cv.imread('res/photos/sudoku/sudokuLibro1.jpeg')
+templates = [cv.imread(f'res/photos/numbers/number{i}HQ.jpeg') for i in range(1, 10)]
+
+cv.imshow("original_image", image)
+cv.waitKey(0)
+
+puzzle, thresh = find_puzzle(image, debug=False)
+
+thresh_fixedlines, sudoku_cells, sudoku_cells_thresh = get_sudoku_squares(thresh, puzzle, debug=False)
+
+cropped_cells = []
+for i in range(len(sudoku_cells)):
+    processed_cell = process_cell(sudoku_cells[i], sudoku_cells_thresh[i])
+    cropped_cells.append(processed_cell)
+
 sudoku_arr = []
-for cell in results:
+for cell in cropped_cells:
 
     sudoku_arr.append(get_number(cell, templates))
 
