@@ -144,7 +144,7 @@ def process_cell(cell, cell_thresh):
     return None
 
 
-def get_number(img, templates):
+def get_number(img, templates, debug=False):
 
     # con umbralización del color
     gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
@@ -155,29 +155,69 @@ def get_number(img, templates):
     _, img = cv.threshold(img, 127, 255, cv.THRESH_BINARY)
     img = cv.bitwise_not(img)
 
+    if debug:
+        cv.imshow("img threshed", img)
+        cv.waitKey(0)
+
     if np.all(thresh == 255):
         return 0
     else:
         results = []
 
-        for idx, template in enumerate(templates):
+        # --> Get just the number in img
 
-            target_height, target_width = img.shape[:2]
+        # Get extreme pixels of the number
+        white_pixels = np.where(img == 255)
+        topmost = np.min(white_pixels[0])
+        bottommost = np.max(white_pixels[0])
+        leftmost = np.min(white_pixels[1])
+        rightmost = np.max(white_pixels[1])
 
-            template = cv.resize(template, (target_width, target_height))
+        # Get ROI
+        new_height = bottommost - topmost
+        new_width = rightmost - leftmost
+        img_ROI = img[topmost:bottommost, leftmost:rightmost]
 
-            cv.imshow("img threshed", img)
+        if debug:
+            cv.imshow("img threshed", img_ROI)
             cv.waitKey(0)
+
+        for idx, template in enumerate(templates):
 
             if len(template.shape) == 3:
                 template = cv.cvtColor(template, cv.COLOR_BGR2GRAY)
             _, template = cv.threshold(template, 127, 255, cv.THRESH_BINARY)
             template = cv.bitwise_not(template)
 
-            cv.imshow("template threshed", template)
-            cv.waitKey(0)
+            # --> Get just the number in template
 
-            result = cv.matchTemplate(img, template, cv.TM_CCOEFF_NORMED)
+            # Get extreme pixels of the template
+            white_pixels = np.where(template == 255)
+            topmost = np.min(white_pixels[0])
+            bottommost = np.max(white_pixels[0])
+            leftmost = np.min(white_pixels[1])
+            rightmost = np.max(white_pixels[1])
+
+            # New template
+            template_ROI = template[topmost:bottommost, leftmost:rightmost]
+
+            # Get the dimensions of this template
+            height, width = template_ROI.shape[:2]
+
+            #print(f"Template's aspect ratio: {width/height}")
+            
+            # Resize template to be of same size, maintaining its aspect ratio
+            template_height = new_height
+            template_width = int(width * (template_height / height))
+            template_ROI = cv.resize(template_ROI, (template_width, template_height))
+
+            #print(f"Template's (New) aspect ratio: {new_width/new_height}")
+
+            if debug:
+                cv.imshow("template threshed & resized", template_ROI)
+                cv.waitKey(0)
+
+            result = cv.matchTemplate(img_ROI, template_ROI, cv.TM_CCOEFF_NORMED)
             # Find the position of the best match
             _, max_val, _, _ = cv.minMaxLoc(result)
             #results[idx + 1] = max_val
@@ -188,7 +228,7 @@ def get_number(img, templates):
 
 # Load image
 image = cv.imread('res/photos/sudoku/sudokuLibro1.jpeg')
-templates = [cv.imread(f'res/photos/numbers/number{i}HQ.jpeg') for i in range(1, 10)]
+templates = [cv.imread(f'res/photos/numbers/number{i}HQ_nomargin.jpg') for i in range(1, 10)]
 
 cv.imshow("original_image", image)
 cv.waitKey(0)
@@ -205,7 +245,7 @@ for i in range(len(sudoku_cells)):
 sudoku_arr = []
 for cell in cropped_cells:
 
-    sudoku_arr.append(get_number(cell, templates))
+    sudoku_arr.append(get_number(cell, templates, True))
 
 print(np.array(sudoku_arr).reshape(9, 9))
 
