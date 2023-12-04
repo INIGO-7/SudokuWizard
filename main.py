@@ -4,7 +4,7 @@ import cv2 as cv
 import pandas as pd
 
 # Load the image and get the sudoku.
-image = cv.imread('res/photos/sudoku/sudoku-puzzle-games.webp')
+image = cv.imread('res/photos/sudoku/sudokuHouse.jpg')
 sudoku = get_sudoku(image)
 
 # Solve the sudoku printing original and solved on screen.

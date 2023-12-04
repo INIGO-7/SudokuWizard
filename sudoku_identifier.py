@@ -15,53 +15,60 @@ NUMBER_TEMPLATES = [cv.imread(f'res/photos/numbers/number{i}HQ_nomargin.jpg') fo
 def find_puzzle(image, verbose=False):
     # convert the image to grayscale, and apply an adaptative threshold
     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
-    blurred = cv.GaussianBlur(gray, (5, 5), 0)
+    thresh = cv.adaptiveThreshold(gray, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 57, 12)
 
     if verbose:
-        cv.imshow("blurred gray orig img", blurred)
-        cv.waitKey(0)
-
-    thresh = cv.adaptiveThreshold(blurred, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 7, 2)
-    thresh = cv.medianBlur(thresh, 3)  # 'k' is the kernel size and must be an odd number.
-
-    kernel = cv.getStructuringElement(cv.MORPH_RECT, (2, 2))  # adjust the kernel size
-    thresh = cv.dilate(thresh, kernel, iterations=1)  # adjust the number of iterations
-
-    thresh = cv.medianBlur(thresh, 5)  # 'k' is the kernel size and must be an odd number.
-
-    if verbose:
-        cv.imshow("horizontal an vertical lines fixed", thresh)
-        cv.waitKey(0)
-
-
-    # Morphological opening to remove noise
-    opening_kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
-    opened = cv.morphologyEx(thresh, cv.MORPH_OPEN, opening_kernel)
-
-    if verbose:
-        cv.imshow("opened", opened)
+        cv.imshow("first thresh", thresh)
         cv.waitKey(0)
 
     # Morphological closing to connect lines
     closing_kernel = cv.getStructuringElement(cv.MORPH_RECT, (5, 5))
-    closed = cv.morphologyEx(opened, cv.MORPH_CLOSE, closing_kernel)
+    thresh = cv.morphologyEx(thresh, cv.MORPH_CLOSE, closing_kernel)
 
     if verbose:
-        cv.imshow("closed", closed)
+        cv.imshow("closed", thresh)
         cv.waitKey(0)
 
-    dilated = closed
+    # Make white lines thicker in order to better identify squares
+    kernel = cv.getStructuringElement(cv.MORPH_RECT, (2, 2))  # adjust the kernel size
+    dilated = cv.dilate(thresh, kernel, iterations=1)  # adjust the number of iterations
+
+    if verbose:
+        cv.imshow("First dilatacioneishon", dilated)
+        cv.waitKey(0)
+
+    thresh = cv.medianBlur(dilated, 3)
+
+    if verbose:
+        cv.imshow("blur antes de buscar contornos", thresh)
+        cv.waitKey(0)
 
     # Filter out all numbers and noise to isolate only boxes
-    cnts = cv.findContours(dilated, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    cnts = cv.findContours(thresh, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
     cnts = cnts[0] if len(cnts) == 2 else cnts[1]
     for c in cnts:
         area = cv.contourArea(c)
         if area < 1200:
-            cv.drawContours(dilated, [c], -1, (0,0,0), -1)
+            cv.drawContours(thresh, [c], -1, (0,0,0), -1)
 
     if verbose:
-        cv.imshow("Puzzle Thresh", dilated)
+        cv.imshow("Puzzle Thresh", thresh)
+        cv.waitKey(0)
+
+    # Morphological closing to connect lines
+    closing_kernel = cv.getStructuringElement(cv.MORPH_RECT, (30, 30))
+    thresh = cv.morphologyEx(thresh, cv.MORPH_CLOSE, closing_kernel)
+
+    if verbose:
+        cv.imshow("pray", thresh)
+        cv.waitKey(0)
+
+    # Make white lines thicker in order to better identify squares
+    kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))  # adjust the kernel size
+    dilated = cv.dilate(thresh, kernel, iterations=3)  # adjust the number of iterations
+
+    if verbose:
+        cv.imshow("Puzzle dilated", dilated)
         cv.waitKey(0)
 
     # find contours in the thresholded image and sort them by size in
@@ -86,7 +93,7 @@ def find_puzzle(image, verbose=False):
     # the outline of the Sudoku puzzle so raise an error
     if puzzleCnt is None:
         raise Exception(("Could not find Sudoku puzzle outline. "
-        "Try debugging your thresholding and contour steps."))
+        "Try verboseging your thresholding and contour steps."))
     
     # check to see if we are visualizing the outline of the detected
     # Sudoku puzzle
@@ -105,9 +112,7 @@ def find_puzzle(image, verbose=False):
     if verbose:
         cv.imshow("Puzzle Transform", puzzle)
         cv.waitKey(0)
-        cv.imshow("Threshold img transform", dilated)
-        cv.waitKey(0)
-
+    
     # return a 2-tuple of puzzle in both RGB and grayscale
     return (puzzle, dilated)
 
