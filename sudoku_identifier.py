@@ -1,41 +1,67 @@
 import cv2 as cv
-import os
-from imutils import contours
-import numpy as np
-from imutils.perspective import four_point_transform
-from skimage.segmentation import clear_border
-import imutils
 import pandas as pd
+import numpy as np
+import os
+from exceptions import SudokuDetectionError
+
+import imutils
+from imutils.perspective import four_point_transform
+from imutils import contours
+from skimage.segmentation import clear_border
+
 
 NUMBER_TEMPLATES = [cv.imread(f'res/photos/numbers/number{i}HQ_nomargin.jpg') for i in range(1, 10)]
 
-def find_puzzle(image, debug=False):
+def find_puzzle(image, verbose=False):
     # convert the image to grayscale, and apply an adaptative threshold
     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
-    thresh = cv.adaptiveThreshold(gray, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 57, 12)
+    blurred = cv.GaussianBlur(gray, (5, 5), 0)
 
-    if debug:
-        cv.imshow("first thresh", thresh)
+    if verbose:
+        cv.imshow("blurred gray orig img", blurred)
         cv.waitKey(0)
 
+    thresh = cv.adaptiveThreshold(blurred, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 7, 2)
+    thresh = cv.medianBlur(thresh, 3)  # 'k' is the kernel size and must be an odd number.
+
+    kernel = cv.getStructuringElement(cv.MORPH_RECT, (2, 2))  # adjust the kernel size
+    thresh = cv.dilate(thresh, kernel, iterations=1)  # adjust the number of iterations
+
+    thresh = cv.medianBlur(thresh, 5)  # 'k' is the kernel size and must be an odd number.
+
+    if verbose:
+        cv.imshow("horizontal an vertical lines fixed", thresh)
+        cv.waitKey(0)
+
+
+    # Morphological opening to remove noise
+    opening_kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
+    opened = cv.morphologyEx(thresh, cv.MORPH_OPEN, opening_kernel)
+
+    if verbose:
+        cv.imshow("opened", opened)
+        cv.waitKey(0)
+
+    # Morphological closing to connect lines
+    closing_kernel = cv.getStructuringElement(cv.MORPH_RECT, (5, 5))
+    closed = cv.morphologyEx(opened, cv.MORPH_CLOSE, closing_kernel)
+
+    if verbose:
+        cv.imshow("closed", closed)
+        cv.waitKey(0)
+
+    dilated = closed
+
     # Filter out all numbers and noise to isolate only boxes
-    cnts = cv.findContours(thresh, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    cnts = cv.findContours(dilated, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
     cnts = cnts[0] if len(cnts) == 2 else cnts[1]
     for c in cnts:
         area = cv.contourArea(c)
         if area < 1200:
-            cv.drawContours(thresh, [c], -1, (0,0,0), -1)
+            cv.drawContours(dilated, [c], -1, (0,0,0), -1)
 
-    if debug:
-        cv.imshow("Puzzle Thresh", thresh)
-        cv.waitKey(0)
-    
-    # Make white lines thicker in order to better identify squares
-    kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))  # adjust the kernel size
-    dilated = cv.dilate(thresh, kernel, iterations=1)  # adjust the number of iterations
-
-    if debug:
-        cv.imshow("Puzzle dilated", dilated)
+    if verbose:
+        cv.imshow("Puzzle Thresh", dilated)
         cv.waitKey(0)
 
     # find contours in the thresholded image and sort them by size in
@@ -66,7 +92,7 @@ def find_puzzle(image, debug=False):
     # Sudoku puzzle
     output = image.copy()
     cv.drawContours(output, [puzzleCnt], -1, (0, 255, 0), 2)
-    if debug:
+    if verbose:
         cv.imshow("Puzzle Outline", output)
         cv.waitKey(0)
 
@@ -76,14 +102,16 @@ def find_puzzle(image, debug=False):
     puzzle = four_point_transform(image, puzzleCnt.reshape(4, 2))
     dilated = four_point_transform(dilated, puzzleCnt.reshape(4, 2))
 
-    if debug:
+    if verbose:
         cv.imshow("Puzzle Transform", puzzle)
+        cv.waitKey(0)
+        cv.imshow("Threshold img transform", dilated)
         cv.waitKey(0)
 
     # return a 2-tuple of puzzle in both RGB and grayscale
     return (puzzle, dilated)
 
-def get_sudoku_squares(thresh, puzzle, debug=False):
+def get_sudoku_squares(thresh, puzzle, verbose=False):
 
     # Fix horizontal and vertical lines
     vertical_kernel = cv.getStructuringElement(cv.MORPH_RECT, (1, 3))
@@ -92,7 +120,7 @@ def get_sudoku_squares(thresh, puzzle, debug=False):
     horizontal_kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 1))
     thresh = cv.morphologyEx(thresh, cv.MORPH_CLOSE, horizontal_kernel, iterations=10)
 
-    if debug:
+    if verbose:
         cv.imshow("horizontal an vertical lines fixed", thresh)
         cv.waitKey(0)
 
@@ -123,9 +151,12 @@ def get_sudoku_squares(thresh, puzzle, debug=False):
             mask = np.zeros(puzzle.shape, dtype=np.uint8)
             cv.drawContours(mask, [c], -1, (255,255,255), -1)
             sudoku_cells_thresh.append(mask)
-
+                
             result = cv.bitwise_and(puzzle, mask)
             result[mask==0] = 255
+            if verbose:
+                cv.imshow("Cell", result)
+                cv.waitKey(0)
             sudoku_cells.append(result)
     
     return (thresh, sudoku_cells, sudoku_cells_thresh)
@@ -147,7 +178,7 @@ def process_cell(cell, cell_thresh):
     return None
 
 
-def get_number(img, NUMBER_TEMPLATES, debug=False):
+def get_number(img, NUMBER_TEMPLATES, verbose=False):
 
     # con umbralización del color
     gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
@@ -158,7 +189,7 @@ def get_number(img, NUMBER_TEMPLATES, debug=False):
     _, img = cv.threshold(img, 127, 255, cv.THRESH_BINARY)
     img = cv.bitwise_not(img)
 
-    if debug:
+    if verbose:
         cv.imshow("img threshed", img)
         cv.waitKey(0)
 
@@ -181,7 +212,7 @@ def get_number(img, NUMBER_TEMPLATES, debug=False):
         new_width = rightmost - leftmost
         img_ROI = img[topmost:bottommost, leftmost:rightmost]
 
-        if debug:
+        if verbose:
             cv.imshow("img threshed", img_ROI)
             cv.waitKey(0)
 
@@ -210,7 +241,7 @@ def get_number(img, NUMBER_TEMPLATES, debug=False):
             # new_width = int(width * (new_height / height))
             template_ROI = cv.resize(template_ROI, (new_width, new_height))
 
-            if debug:
+            if verbose:
                 cv.imshow("template threshed & resized", template_ROI)
                 cv.waitKey(0)
 
@@ -222,11 +253,22 @@ def get_number(img, NUMBER_TEMPLATES, debug=False):
         
         return results.index(max(results)) + 1
 
-def get_sudoku(image, debug : bool = False) -> pd.DataFrame:
+def get_sudoku(image, verbose : bool = False, detection_attempts : int = 5) -> pd.DataFrame:
     
-    puzzle, thresh = find_puzzle(image, debug=debug)
+    puzzle, thresh = find_puzzle(image, verbose=verbose)
 
-    _, sudoku_cells, sudoku_cells_thresh = get_sudoku_squares(thresh, puzzle, debug=debug)
+    attempt_count = 0
+    while attempt_count < detection_attempts:
+        _, sudoku_cells, sudoku_cells_thresh = get_sudoku_squares(thresh, puzzle, verbose=verbose)
+        attempt_count += 1
+
+        if len(sudoku_cells) == 81:
+            break
+
+        print(f"Attempt {attempt_count}: Couldn't detect the sudoku -> {len(sudoku_cells)} cells detected")
+
+        if attempt_count == detection_attempts:
+            raise SudokuDetectionError(len(sudoku_cells), detection_attempts)
 
     cropped_cells = []
     for i in range(len(sudoku_cells)):
@@ -236,6 +278,21 @@ def get_sudoku(image, debug : bool = False) -> pd.DataFrame:
     sudoku_arr = []
     for cell in cropped_cells:
 
-        sudoku_arr.append(get_number(cell, NUMBER_TEMPLATES, debug))
+        if verbose:
+            cv.imshow('cropped cell to analyze', cell)
+            cv.waitKey(0)
+
+        sudoku_arr.append(get_number(cell, NUMBER_TEMPLATES, verbose))
 
     return pd.DataFrame(np.array(sudoku_arr).reshape(9, 9))
+
+
+def main():
+    image = cv.imread('res/photos/sudoku/sudokuLibro1.jpeg')
+    cv.imshow('original image', image)
+    cv.waitKey(0)
+
+    get_sudoku(image, True, 1)
+
+if __name__ == "__main__":
+    main()
