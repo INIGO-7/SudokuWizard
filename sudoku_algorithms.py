@@ -527,17 +527,20 @@ class problemSudoku ():
     goal_state = {}
     actions = []
 
-    def __init__(self): ## init method is the constructor.
-        #read the sudoku ::: START WITH SUDOKU 3, AS IT IS THE EASIEST ONE: CHANGE PATH TO REAL ONE
-        # CHANGE THIS PATH TO THE CORRECT ONE IN YOUR DRIVE UNIT
-        sudoku1 = pd.read_csv("res/sudoku-1.txt", header=None)
-        sudoku2 = pd.read_csv("res/sudoku-2.txt", header=None)
-        sudoku3 = pd.read_csv("res/sudoku-3.txt", header=None)
-        sudoku4 = pd.read_csv("res/sudoku-4.txt", header=None)
+    def __init__(self, sudoku : pd.DataFrame | None = None):
+        
+        sudoku1 = pd.read_csv("res/sample_sudokus/sudoku-1.txt", header=None)
+        sudoku2 = pd.read_csv("res/sample_sudokus/sudoku-2.txt", header=None)
+        sudoku3 = pd.read_csv("res/sample_sudokus/sudoku-3.txt", header=None)
+        sudoku4 = pd.read_csv("res/sample_sudokus/sudoku-4.txt", header=None)
 
         #Assign name initial state, goal state, and possible actions
 
-        self.initial_state = sudoku3
+        if sudoku is None:
+            self.initial_state = sudoku3
+        else:
+            self.initial_state = sudoku
+        
         #self.goal_state =
         self.actions = [f'write{i}' for i in range(1,10)]
 
@@ -625,12 +628,16 @@ class problemSudoku ():
     def get_evaluation (self, state):
         return 1
 
-p = problemSudoku()
-print("Initial state: ")
-printSudoku(p.initial_state)
-res = BFS(p)
-print("Solved sudoku: ")
-printSudoku(res["final_state"]["state"])
+def main():
+    p = problemSudoku()
+    print("Initial state: ")
+    printSudoku(p.initial_state)
+    res = BFS(p)
+    print("Solved sudoku: ")
+    printSudoku(res["final_state"]["state"])
+
+if __name__ == "__main__":
+    main()
 
 # p = problemSudoku()
 # print (p.initial_state)

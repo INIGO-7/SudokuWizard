@@ -5,6 +5,9 @@ import numpy as np
 from imutils.perspective import four_point_transform
 from skimage.segmentation import clear_border
 import imutils
+import pandas as pd
+
+NUMBER_TEMPLATES = [cv.imread(f'res/photos/numbers/number{i}HQ_nomargin.jpg') for i in range(1, 10)]
 
 def find_puzzle(image, debug=False):
     # convert the image to grayscale, and apply an adaptative threshold
@@ -144,7 +147,7 @@ def process_cell(cell, cell_thresh):
     return None
 
 
-def get_number(img, templates, debug=False):
+def get_number(img, NUMBER_TEMPLATES, debug=False):
 
     # con umbralización del color
     gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
@@ -173,7 +176,7 @@ def get_number(img, templates, debug=False):
         leftmost = np.min(white_pixels[1])
         rightmost = np.max(white_pixels[1])
 
-        # Get ROI
+        # Get img region of interest (ROI)
         new_height = bottommost - topmost
         new_width = rightmost - leftmost
         img_ROI = img[topmost:bottommost, leftmost:rightmost]
@@ -182,7 +185,7 @@ def get_number(img, templates, debug=False):
             cv.imshow("img threshed", img_ROI)
             cv.waitKey(0)
 
-        for idx, template in enumerate(templates):
+        for idx, template in enumerate(NUMBER_TEMPLATES):
 
             if len(template.shape) == 3:
                 template = cv.cvtColor(template, cv.COLOR_BGR2GRAY)
@@ -198,57 +201,41 @@ def get_number(img, templates, debug=False):
             leftmost = np.min(white_pixels[1])
             rightmost = np.max(white_pixels[1])
 
-            # New template
+            # Get template region of interest (ROI)
             template_ROI = template[topmost:bottommost, leftmost:rightmost]
-
-            # Get the dimensions of this template
-            height, width = template_ROI.shape[:2]
-
-            #print(f"Template's aspect ratio: {width/height}")
             
-            # Resize template to be of same size, maintaining its aspect ratio
-            template_height = new_height
-            template_width = int(width * (template_height / height))
-            template_ROI = cv.resize(template_ROI, (template_width, template_height))
-
-            #print(f"Template's (New) aspect ratio: {new_width/new_height}")
+            # --> Resize template to be the same size of the number
+            # might work better if original aspect ratio is maintained, adjusting width to new height:
+            # height, width = template_ROI.shape[:2]
+            # new_width = int(width * (new_height / height))
+            template_ROI = cv.resize(template_ROI, (new_width, new_height))
 
             if debug:
                 cv.imshow("template threshed & resized", template_ROI)
                 cv.waitKey(0)
 
             result = cv.matchTemplate(img_ROI, template_ROI, cv.TM_CCOEFF_NORMED)
+
             # Find the position of the best match
             _, max_val, _, _ = cv.minMaxLoc(result)
-            #results[idx + 1] = max_val
             results.append(max_val)
         
         return results.index(max(results)) + 1
 
+def get_sudoku(image, debug : bool = False) -> pd.DataFrame:
+    
+    puzzle, thresh = find_puzzle(image, debug=debug)
 
-# Load image
-image = cv.imread('res/photos/sudoku/sudokuLibro1.jpeg')
-templates = [cv.imread(f'res/photos/numbers/number{i}HQ_nomargin.jpg') for i in range(1, 10)]
+    _, sudoku_cells, sudoku_cells_thresh = get_sudoku_squares(thresh, puzzle, debug=debug)
 
-cv.imshow("original_image", image)
-cv.waitKey(0)
+    cropped_cells = []
+    for i in range(len(sudoku_cells)):
+        processed_cell = process_cell(sudoku_cells[i], sudoku_cells_thresh[i])
+        cropped_cells.append(processed_cell)
 
-puzzle, thresh = find_puzzle(image, debug=False)
+    sudoku_arr = []
+    for cell in cropped_cells:
 
-thresh_fixedlines, sudoku_cells, sudoku_cells_thresh = get_sudoku_squares(thresh, puzzle, debug=False)
+        sudoku_arr.append(get_number(cell, NUMBER_TEMPLATES, debug))
 
-cropped_cells = []
-for i in range(len(sudoku_cells)):
-    processed_cell = process_cell(sudoku_cells[i], sudoku_cells_thresh[i])
-    cropped_cells.append(processed_cell)
-
-sudoku_arr = []
-for cell in cropped_cells:
-
-    sudoku_arr.append(get_number(cell, templates, True))
-
-print(np.array(sudoku_arr).reshape(9, 9))
-
-# HACER RESHAPE DEL ARRAY
-
-# METER A DATAFRAME DE PANDAS
+    return pd.DataFrame(np.array(sudoku_arr).reshape(9, 9))
