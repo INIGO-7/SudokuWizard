@@ -307,7 +307,7 @@ def get_sudoku(image, verbose : bool = False, detection_attempts : int = 5) -> p
 
         sudoku_arr.append(get_number(cell, NUMBER_TEMPLATES, verbose))
 
-    return pd.DataFrame(np.array(sudoku_arr).reshape(9, 9))
+    return np.array(sudoku_arr).reshape(9, 9)
 
 
 def main():

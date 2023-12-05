@@ -5,12 +5,18 @@ import pandas as pd
 
 # Load the image and get the sudoku.
 image = cv.imread('res/photos/sudoku/sudokuHouse.jpg')
-sudoku = get_sudoku(image)
+sudoku_arr = get_sudoku(image)
+sudoku_df = pd.DataFrame(sudoku_arr)
 
 # Solve the sudoku printing original and solved on screen.
-p = problemSudoku(sudoku)
+p = problemSudoku(sudoku_df)
 print("Initial state: ")
 printSudoku(p.initial_state)
-res = BFS(p)
+sudoku_solved_df = BFS(p)["final_state"]["state"]
 print("Solved sudoku: ")
-printSudoku(res["final_state"]["state"])
+printSudoku(sudoku_solved_df)
+
+sudoku_solved_arr = sudoku_solved_df.values.flatten()
+
+# Now fill the original sudoku with the missing numbers
+
