@@ -21,14 +21,6 @@ def find_puzzle(image, verbose=False):
         cv.imshow("first thresh", thresh)
         cv.waitKey(0)
 
-    # Morphological closing to connect lines
-    closing_kernel = cv.getStructuringElement(cv.MORPH_RECT, (5, 5))
-    thresh = cv.morphologyEx(thresh, cv.MORPH_CLOSE, closing_kernel)
-
-    if verbose:
-        cv.imshow("closed", thresh)
-        cv.waitKey(0)
-
     # Make white lines thicker in order to better identify squares
     kernel = cv.getStructuringElement(cv.MORPH_RECT, (2, 2))  # adjust the kernel size
     dilated = cv.dilate(thresh, kernel, iterations=1)  # adjust the number of iterations
@@ -37,7 +29,16 @@ def find_puzzle(image, verbose=False):
         cv.imshow("First dilatacioneishon", dilated)
         cv.waitKey(0)
 
-    thresh = cv.medianBlur(dilated, 3)
+    # Morphological closing to connect lines
+    closing_kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
+    thresh = cv.morphologyEx(dilated, cv.MORPH_CLOSE, closing_kernel)
+
+    if verbose:
+        cv.imshow("closed", thresh)
+        cv.waitKey(0)
+
+    # Blur to reduce noise
+    thresh = cv.medianBlur(thresh, 3)
 
     if verbose:
         cv.imshow("blur antes de buscar contornos", thresh)
@@ -52,28 +53,31 @@ def find_puzzle(image, verbose=False):
             cv.drawContours(thresh, [c], -1, (0,0,0), -1)
 
     if verbose:
-        cv.imshow("Puzzle Thresh", thresh)
+        cv.imshow("Contornos encontrados", thresh)
         cv.waitKey(0)
 
     # Morphological closing to connect lines
-    closing_kernel = cv.getStructuringElement(cv.MORPH_RECT, (30, 30))
+    closing_kernel = cv.getStructuringElement(cv.MORPH_RECT, (9, 9))
     thresh = cv.morphologyEx(thresh, cv.MORPH_CLOSE, closing_kernel)
 
     if verbose:
-        cv.imshow("pray", thresh)
+        cv.imshow("big closing bro", thresh)
         cv.waitKey(0)
 
-    # Make white lines thicker in order to better identify squares
-    kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))  # adjust the kernel size
-    dilated = cv.dilate(thresh, kernel, iterations=3)  # adjust the number of iterations
+    # Probamos a arreglar las lineas horizontales y verticales!
+    vertical_kernel = cv.getStructuringElement(cv.MORPH_RECT, (1, 3))
+    thresh = cv.morphologyEx(thresh, cv.MORPH_CLOSE, vertical_kernel, iterations=10)
+
+    horizontal_kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 1))
+    thresh = cv.morphologyEx(thresh, cv.MORPH_CLOSE, horizontal_kernel, iterations=10)
 
     if verbose:
-        cv.imshow("Puzzle dilated", dilated)
+        cv.imshow("Horiz and vert FIXED", thresh)
         cv.waitKey(0)
 
     # find contours in the thresholded image and sort them by size in
     # descending order
-    cnts = cv.findContours(dilated.copy(), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    cnts = cv.findContours(thresh.copy(), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
     cnts = imutils.grab_contours(cnts)
     cnts = sorted(cnts, key=cv.contourArea, reverse=True)
     # initialize a contour that corresponds to the puzzle outline
@@ -107,30 +111,44 @@ def find_puzzle(image, verbose=False):
     # image and grayscale image to obtain a top-down bird's eye view
     # of the puzzle
     puzzle = four_point_transform(image, puzzleCnt.reshape(4, 2))
-    dilated = four_point_transform(dilated, puzzleCnt.reshape(4, 2))
+    thresh = four_point_transform(thresh, puzzleCnt.reshape(4, 2))
 
     if verbose:
         cv.imshow("Puzzle Transform", puzzle)
         cv.waitKey(0)
     
     # return a 2-tuple of puzzle in both RGB and grayscale
-    return (puzzle, dilated)
+    
+    return (puzzle, thresh)
 
 def get_sudoku_squares(thresh, puzzle, verbose=False):
 
-    # Fix horizontal and vertical lines
-    vertical_kernel = cv.getStructuringElement(cv.MORPH_RECT, (1, 3))
-    thresh = cv.morphologyEx(thresh, cv.MORPH_CLOSE, vertical_kernel, iterations=10)
+    """
+    Assume we are given an image without noise. We want to dilate the puzzle given to avoid black lines and
+    get just the number.
+    """
 
-    horizontal_kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 1))
-    thresh = cv.morphologyEx(thresh, cv.MORPH_CLOSE, horizontal_kernel, iterations=10)
+    # Make white lines thicker to get just the number, not the cell that it is bounded by.
+    kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))  # adjust the kernel size
+    dilated = cv.dilate(thresh, kernel, iterations=1)  # adjust the number of iterations
 
     if verbose:
-        cv.imshow("horizontal an vertical lines fixed", thresh)
+        cv.imshow("Dilate puzzle", dilated)
+        cv.waitKey(0)
+
+    # Fix horizontal and vertical lines again
+    vertical_kernel = cv.getStructuringElement(cv.MORPH_RECT, (1, 3))
+    vert_fixed = cv.morphologyEx(dilated, cv.MORPH_CLOSE, vertical_kernel, iterations=10)
+
+    horizontal_kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 1))
+    fixed_img = cv.morphologyEx(vert_fixed, cv.MORPH_CLOSE, horizontal_kernel, iterations=10)
+
+    if verbose:
+        cv.imshow("Again, fix horizontal an vertical just in case", fixed_img)
         cv.waitKey(0)
 
     # Sort by top to bottom and each row by left to right
-    invert = 255 - thresh
+    invert = 255 - fixed_img
     cnts = cv.findContours(invert, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
     cnts = cnts[0] if len(cnts) == 2 else cnts[1]
     (cnts, _) = contours.sort_contours(cnts, method="top-to-bottom")
@@ -274,7 +292,7 @@ def get_sudoku(image, verbose : bool = False, detection_attempts : int = 5) -> p
 
         if attempt_count == detection_attempts:
             raise SudokuDetectionError(len(sudoku_cells), detection_attempts)
-
+    
     cropped_cells = []
     for i in range(len(sudoku_cells)):
         processed_cell = process_cell(sudoku_cells[i], sudoku_cells_thresh[i])
@@ -293,7 +311,7 @@ def get_sudoku(image, verbose : bool = False, detection_attempts : int = 5) -> p
 
 
 def main():
-    image = cv.imread('res/photos/sudoku/sudokuLibro1.jpeg')
+    image = cv.imread('res/photos/sudoku/sudokuHouse.jpg')
     cv.imshow('original image', image)
     cv.waitKey(0)
 
