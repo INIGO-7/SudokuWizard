@@ -11,6 +11,8 @@ from imutils.perspective import four_point_transform
 from imutils import contours
 from skimage.segmentation import clear_border
 
+from sudoku_algorithms import *
+
 
 class SudokuWizard():
 
@@ -50,7 +52,12 @@ class SudokuWizard():
         self.sudoku = None
         self.sudoku_thresh = None
         self.cells = []
+        self.cells_bounding_box = []
         self.sudoku_arr = []
+        self.solution = []
+
+        self.font = cv.FONT_HERSHEY_SIMPLEX
+        self.font_color = (0, 0, 255)  # Red color
 
 
     def scan_image(self, verbose : bool = False) -> (np.ndarray, np.ndarray):
@@ -250,6 +257,8 @@ class SudokuWizard():
             area = cv.contourArea(c)
             if area < 50000:
                 row.append(c)
+
+                # Once 9 cells have been added to the row, they are sorted and added to sudoku_rows
                 if i % 9 == 0:  
                     (cnts, _) = contours.sort_contours(row, method="left-to-right")
                     sudoku_rows.append(cnts)
@@ -263,6 +272,8 @@ class SudokuWizard():
                 # the precision the contour provides, and this is in jeopardy when we get a 
                 # rectangle from the contour. So here we get the exact crop of the original image
                 # where a contour has been detected.
+
+                self.cells_bounding_box.append(cv.boundingRect(cell_contour))
 
                 mask = np.zeros(self.sudoku.shape, dtype=np.uint8)
                 cv.drawContours(mask, [cell_contour], -1, (255,255,255), -1)
@@ -379,18 +390,63 @@ class SudokuWizard():
         self.scan_image(verbose=verbose)
         self.extract_cells(verbose=verbose)
         return self.extract_numbers(verbose=verbose)
+    
+    def solve(self, verbose : bool = False):
 
+        sudoku_df = pd.DataFrame(self.sudoku_arr)
+        p = problemSudoku(sudoku_df)
+
+        if verbose:
+            print("Initial state: ")
+            printSudoku(p.initial_state)
+        
+        sudoku_solved_df = BFS(p)["final_state"]["state"]
+
+        if verbose:
+            print("Solved sudoku: ")
+            printSudoku(sudoku_solved_df)
+        
+        self.solution = sudoku_solved_df.values.flatten().reshape(9, 9)
+    
+    def show_solution(self):
+
+        solution_img = self.sudoku.copy()
+        font_scale = 1
+        font_thickness = 2
+
+        for row_idx in range(9):
+            for cell_idx in range(9):
+                if self.sudoku_arr[row_idx][cell_idx] == 0:
+                    
+                    number_to_write = str(self.solution[row_idx][cell_idx])
+                    x, y, width, height = self.cells_bounding_box[(row_idx * 9) + cell_idx]
+
+                    # Position adjustment to center the text in the cell
+                    text_size = cv.getTextSize(number_to_write, self.font, font_scale, font_thickness)[0]
+                    text_x = x + (width - text_size[0]) // 2
+                    text_y = y + (height + text_size[1]) // 2
+
+                    cv.putText(
+                        solution_img, 
+                        number_to_write, 
+                        (text_x, text_y), 
+                        self.font, 
+                        font_scale, 
+                        self.font_color, 
+                        font_thickness
+                    )
+        
+        cv.imshow('Sudoku Solved', solution_img)
+        cv.waitKey(0)
+        return solution_img
 
 def main():
-    image = cv.imread('res/photos/sudoku/sudokuHouse.jpg')
+    image = cv.imread('res/photos/sudoku/sudokuLibro1.jpeg')
 
     sw = SudokuWizard(image)
-    res = sw.run()
-
-    #Show the image of the sudoku, and the obtained numbers to check if they're correct.
-    print(res)
-    cv.imshow('original image', image)
-    cv.waitKey(0)
+    sw.run()
+    sw.solve()
+    sw.show_solution()
 
 if __name__ == "__main__":
     main()
