@@ -57,7 +57,7 @@ class SudokuWizard():
         self.solution = []
 
         self.font = cv.FONT_HERSHEY_SIMPLEX
-        self.font_color = (0, 0, 255)  # Red color
+        self.font_color = (8, 8, 161)  # Paint color
 
 
     def scan_image(self, verbose : bool = False) -> (np.ndarray, np.ndarray):
@@ -385,10 +385,15 @@ class SudokuWizard():
 
         return self.sudoku_arr
 
-    def run(self, verbose : bool = False) -> pd.DataFrame:
+    def get_sudoku(self, verbose : bool = False) -> pd.DataFrame:
         
+        # Scan the image to get a cropped image with the sudoku
         self.scan_image(verbose=verbose)
+
+        # Get each cell from that cropped sudoku
         self.extract_cells(verbose=verbose)
+
+        # Get all the numbers corresponding each cell, and return
         return self.extract_numbers(verbose=verbose)
     
     def solve(self, verbose : bool = False):
@@ -408,11 +413,25 @@ class SudokuWizard():
         
         self.solution = sudoku_solved_df.values.flatten().reshape(9, 9)
     
+    def get_font_size(self, width, height):
+        
+        # Base font scale
+        base_font_scale = 1.0
+
+        # Scale factor
+        scale_factor = min(width, height) / 35.0  # Assuming 35 is approx. base cell size
+
+        # Adjusted font size
+        font_scale = base_font_scale * scale_factor
+
+        # Estimate font thickness
+        font_thickness = max(2, int(font_scale / 2))
+
+        return font_scale, font_thickness
+
     def show_solution(self):
 
         solution_img = self.sudoku.copy()
-        font_scale = 1
-        font_thickness = 2
 
         for row_idx in range(9):
             for cell_idx in range(9):
@@ -420,6 +439,9 @@ class SudokuWizard():
                     
                     number_to_write = str(self.solution[row_idx][cell_idx])
                     x, y, width, height = self.cells_bounding_box[(row_idx * 9) + cell_idx]
+
+                    # Adjust the font size to fit the cell's dimesions
+                    font_scale, font_thickness = self.get_font_size(width, height)
 
                     # Position adjustment to center the text in the cell
                     text_size = cv.getTextSize(number_to_write, self.font, font_scale, font_thickness)[0]
@@ -439,13 +461,25 @@ class SudokuWizard():
         cv.imshow('Sudoku Solved', solution_img)
         cv.waitKey(0)
         return solution_img
+    
+    def run(self, verbose : bool = False):
+
+        # Get the sudoku from the original image
+        self.get_sudoku(verbose=verbose)
+
+        # Solve the obtained sudoku
+        self.solve(verbose=verbose)
+
+        # Show the solution we have found and return it
+        return self.show_solution()
+
 
 def main():
-    image = cv.imread('res/photos/sudoku/sudokuLibro1.jpeg')
+    image = cv.imread('res/photos/sudoku/sudoku-puzzle-games.webp')
 
     sw = SudokuWizard(image)
-    sw.run()
-    sw.solve()
+    sw.get_sudoku()
+    sw.solve(True)
     sw.show_solution()
 
 if __name__ == "__main__":
