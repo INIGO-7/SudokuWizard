@@ -49,10 +49,8 @@ class SudokuWizard():
         self.image = image
         self.sudoku = None
         self.sudoku_thresh = None
-        self.cell_arr = None
-        self.cell_thresh_arr = None
-        self.cropped_cells = None
-        self.sudoku_arr = None
+        self.cells = []
+        self.sudoku_arr = []
 
 
     def scan_image(self, verbose : bool = False) -> (np.ndarray, np.ndarray):
@@ -181,6 +179,29 @@ class SudokuWizard():
         # return a 2-tuple of the cropped sudoku in both RGB and B/W
         return (sudoku, sudoku_thresh)
 
+    def crop_by_contour(self, image, contour):
+
+        """
+        This function returns an image that is cropped with a contour given by parameter.
+        """
+
+        # Find white pixels (the contour)
+        white_pixels = np.where(contour == 255)
+
+        # Only if there are more than 16 white pixels in the image (we have at least the contour of a small cell)
+        if white_pixels[0].size > 4 and white_pixels[1].size > 4:
+            
+            topmost = np.min(white_pixels[0])
+            bottommost = np.max(white_pixels[0])
+            leftmost = np.min(white_pixels[1])
+            rightmost = np.max(white_pixels[1])
+
+            return image[topmost:bottommost+1, leftmost:rightmost+1] #sum one because python slicing goes to init:end-1
+        
+        # If we don't have a contour, then we end the process
+        else:
+            raise Exception(("The contour of this cell is invalid!"))
+
     def extract_cells(self, verbose=False):
 
         """
@@ -233,58 +254,33 @@ class SudokuWizard():
                     (cnts, _) = contours.sort_contours(row, method="left-to-right")
                     sudoku_rows.append(cnts)
                     row = []
-
-        # Inicializamos los arrays en los que vamos a meter las celdas identificadas normales,
-        # y las celdas en blanco y negro
-        sudoku_cells = []
-        sudoku_cells_thresh = []
+                    
 
         for row in sudoku_rows:
-            for c in row:
+            for cell_contour in row:
+
+                # A crop done with the bounding rect of each contour is not good enough, we need
+                # the precision the contour provides, and this is in jeopardy when we get a 
+                # rectangle from the contour. So here we get the exact crop of the original image
+                # where a contour has been detected.
 
                 mask = np.zeros(self.sudoku.shape, dtype=np.uint8)
-                cv.drawContours(mask, [c], -1, (255,255,255), -1)
-                sudoku_cells_thresh.append(mask)
-                    
-                result = cv.bitwise_and(self.sudoku, mask)
-                result[mask==0] = 255
-                sudoku_cells.append(result)
+                cv.drawContours(mask, [cell_contour], -1, (255,255,255), -1)
+
+                highlighted_cell = cv.bitwise_and(self.sudoku, mask)
+                highlighted_cell[mask==0] = 255
+
+                cropped_cell = self.crop_by_contour(highlighted_cell, mask)
+                self.cells.append(cropped_cell)
 
                 if verbose:
-                    cv.imshow("Celda detectada", result)
-                    cv.waitKey(100)
+                    cv.imshow("Celda recortada", cropped_cell)
+                    cv.waitKey(150)
 
-        if len(sudoku_cells) != 81:
-            raise SudokuDetectionError(len(sudoku_cells))
+        if len(self.cells) != 81:
+            raise SudokuDetectionError(len(self.cells))
 
-        self.cell_arr = sudoku_cells
-        self.cell_thresh_arr = sudoku_cells_thresh
-
-        return (sudoku_cells, sudoku_cells_thresh)
-
-
-    def crop_cell(self, cell, cell_contour):
-
-        """
-        This function crops cells given their contour
-        """
-
-        # Find white pixels (the contour)
-        white_pixels = np.where(cell_contour == 255)
-
-        # Only if there are more than 16 white pixels in the image (we have at least the contour of a small cell)
-        if white_pixels[0].size > 4 and white_pixels[1].size > 4:
-            
-            topmost = np.min(white_pixels[0])
-            bottommost = np.max(white_pixels[0])
-            leftmost = np.min(white_pixels[1])
-            rightmost = np.max(white_pixels[1])
-
-            return cell[topmost:bottommost+1, leftmost:rightmost+1] #sum one because python slicing goes to init:end-1
-        
-        # If we don't have a contour, then we end the process
-        else:
-            raise Exception(("The contour of this cell is invalid!"))
+        return self.cells
 
 
     def get_cell_number(self, cell : np.ndarray, verbose : bool = False):
@@ -371,14 +367,7 @@ class SudokuWizard():
 
     def extract_numbers(self, verbose : bool = False) -> np.array:
 
-        self.cropped_cells = []
-        self.sudoku_arr = []
-
-        for i in range(len(self.cell_arr)):
-            processed_cell = self.crop_cell(self.cell_arr[i], self.cell_thresh_arr[i])
-            self.cropped_cells.append(processed_cell)
-
-        for cell in self.cropped_cells:
+        for cell in self.cells:
             self.sudoku_arr.append(self.get_cell_number(cell, verbose))
 
         self.sudoku_arr = np.array(self.sudoku_arr).reshape(9, 9)
@@ -394,12 +383,12 @@ class SudokuWizard():
 
 def main():
     image = cv.imread('res/photos/sudoku/sudokuHouse.jpg')
-    
+
     sw = SudokuWizard(image)
-    result = sw.run()
+    res = sw.run()
 
     #Show the image of the sudoku, and the obtained numbers to check if they're correct.
-    print(result)
+    print(res)
     cv.imshow('original image', image)
     cv.waitKey(0)
 
