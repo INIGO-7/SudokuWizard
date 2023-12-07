@@ -10,6 +10,7 @@ import imutils
 from imutils.perspective import four_point_transform
 from imutils import contours
 from skimage.segmentation import clear_border
+import easyocr
 
 from sudoku_algorithms import *
 
@@ -58,6 +59,8 @@ class SudokuWizard():
 
         self.font = cv.FONT_HERSHEY_SIMPLEX
         self.font_color = (8, 8, 161)  # Paint color
+
+        self.ocr_reader = None
 
 
     def scan_image(self, verbose : bool = False) -> (np.ndarray, np.ndarray):
@@ -209,7 +212,7 @@ class SudokuWizard():
         else:
             raise Exception(("The contour of this cell is invalid!"))
 
-    def extract_cells(self, verbose=False):
+    def extract_cells(self, verbose : bool = False):
 
         """
         Assume we already have an image of the cropped sudoku without noise (func scan_sudoku must run first).
@@ -294,7 +297,7 @@ class SudokuWizard():
         return self.cells
 
 
-    def get_cell_number(self, cell : np.ndarray, verbose : bool = False):
+    def get_cell_number(self, cell : np.ndarray, verbose : bool = False, ocr : bool = False):
 
         # Threshold to show the number, or nothing if there is not a number in the cell
         gray = cv.cvtColor(cell, cv.COLOR_BGR2GRAY)
@@ -309,6 +312,40 @@ class SudokuWizard():
             return 0
         
         # If there was something in the cell...
+        elif ocr:
+            
+            result = self.ocr_reader.readtext(cell, low_text=0.2, link_threshold=0.2, allowlist=[str(num) for num in range(1,10)])
+            
+            if result == []:
+                
+                top, bottom, left, right = [50]*4  # or [5]*4 if you want 5 pixels
+
+                # Create the border with white color (255, 255, 255)
+                cell = cv.copyMakeBorder(cell, top, bottom, left, right, cv.BORDER_CONSTANT, value=[255, 255, 255])
+
+                # Convert to grayscale for simplicity; remove this line if working with a colored image
+                cell = cv.cvtColor(cell, cv.COLOR_BGR2GRAY)
+
+                # Adjust contrast - alpha: Contrast control (1.0-3.0), beta: Brightness control (0-100)
+                alpha = 1.5  # Contrast control (>1.0 increases contrast, <1.0 decreases contrast)
+                beta = 0     # No brightness adjustment
+
+                # Apply the contrast adjustment
+                cell = cv.convertScaleAbs(cell, alpha=alpha, beta=beta)
+
+                result = self.ocr_reader.readtext(cell, low_text=0.2, link_threshold=0.2, allowlist=[str(num) for num in range(1,10)])
+
+                cv.imshow("new cell", cell)
+                cv.waitKey(0)
+
+                if result == []:
+                    return None
+                else:
+                    return int(result[0][1])
+                
+            else:
+                return int(result[0][1])
+
         else:
 
             if len(cell.shape) == 3:
@@ -318,6 +355,14 @@ class SudokuWizard():
             _, cell = cv.threshold(cell, 127, 255, cv.THRESH_BINARY)
             cell = cv.bitwise_not(cell)
             results = []
+
+            if verbose:
+                cv.imshow("Celda", cell)
+                cv.waitKey(0)
+
+            # if ocr:
+            #     result = self.ocr_reader.readtext(cell, allowlist=[str(num) for num in range(1,10)])
+            #     print(result)
 
             # --> Get just the number in cell
 
@@ -333,53 +378,57 @@ class SudokuWizard():
             new_width = rightmost - leftmost
             cell_ROI = cell[topmost:bottommost, leftmost:rightmost]
 
-            if verbose:
-                cv.imshow("Region de interes de nuestra celda", cell_ROI)
-                cv.waitKey(0)
+            # if verbose:
+            #     cv.imshow("Region de interes de nuestra celda", cell_ROI)
+            #     cv.waitKey(0)
 
-            for template in self.TEMPLATES:
+            if not ocr:
+                for template in self.TEMPLATES:
 
-                # We turn the image into grayscale if we have a coloured image
-                if len(template.shape) == 3:
-                    template = cv.cvtColor(template, cv.COLOR_BGR2GRAY)
+                    # We turn the image into grayscale if we have a coloured image
+                    if len(template.shape) == 3:
+                        template = cv.cvtColor(template, cv.COLOR_BGR2GRAY)
 
-                # The same threshold applied to the cell is applied to the template 
-                _, template = cv.threshold(template, 127, 255, cv.THRESH_BINARY)
-                template = cv.bitwise_not(template)
+                    # The same threshold applied to the cell is applied to the template 
+                    _, template = cv.threshold(template, 127, 255, cv.THRESH_BINARY)
+                    template = cv.bitwise_not(template)
 
-                # --> Get just the number in template
+                    # --> Get just the number in template
 
-                # Get extreme pixels of the template
-                white_pixels = np.where(template == 255)
-                topmost = np.min(white_pixels[0])
-                bottommost = np.max(white_pixels[0])
-                leftmost = np.min(white_pixels[1])
-                rightmost = np.max(white_pixels[1])
+                    # Get extreme pixels of the template
+                    white_pixels = np.where(template == 255)
+                    topmost = np.min(white_pixels[0])
+                    bottommost = np.max(white_pixels[0])
+                    leftmost = np.min(white_pixels[1])
+                    rightmost = np.max(white_pixels[1])
 
-                # Get the template's region of interest (ROI), which is the number
-                template_ROI = template[topmost:bottommost, leftmost:rightmost]
-                
-                # --> Resize template to be the same size of the number, without maintaining original aspect ratio.
-                # This gives a much better result than maintaining the aspect ratio.
-                template_ROI = cv.resize(template_ROI, (new_width, new_height))
+                    # Get the template's region of interest (ROI), which is the number
+                    template_ROI = template[topmost:bottommost, leftmost:rightmost]
+                    
+                    # --> Resize template to be the same size of the number, without maintaining original aspect ratio.
+                    # This gives a much better result than maintaining the aspect ratio.
+                    template_ROI = cv.resize(template_ROI, (new_width, new_height))
 
-                if verbose:
-                    cv.imshow("Region de interes de nuestro template", template_ROI)
-                    cv.waitKey(0)
+                    if verbose:
+                        cv.imshow("Region de interes de nuestro template", template_ROI)
+                        cv.waitKey(0)
 
-                result = cv.matchTemplate(cell_ROI, template_ROI, cv.TM_CCOEFF_NORMED)
+                    result = cv.matchTemplate(cell_ROI, template_ROI, cv.TM_CCOEFF_NORMED)
 
-                # Find the position of the best match
-                _, max_val, _, _ = cv.minMaxLoc(result)
-                results.append(max_val)
+                    # Find the position of the best match
+                    _, max_val, _, _ = cv.minMaxLoc(result)
+                    results.append(max_val)
             
-            # Return the index+1 with the highest match ratio, which would be the template it resembles the most to.
-            return results.index(max(results)) + 1
+                    # Return the index+1 with the highest match ratio, which would be the template it resembles the most to.
+                    return results.index(max(results)) + 1
 
-    def extract_numbers(self, verbose : bool = False) -> np.array:
+    def extract_numbers(self, verbose : bool = False, ocr : bool = False) -> np.array:
 
+        if ocr:
+            self.ocr_reader = easyocr.Reader(['en'], gpu=False)
+            
         for cell in self.cells:
-            self.sudoku_arr.append(self.get_cell_number(cell, verbose))
+            self.sudoku_arr.append(self.get_cell_number(cell, verbose, ocr))
 
         self.sudoku_arr = np.array(self.sudoku_arr).reshape(9, 9)
 
@@ -475,12 +524,12 @@ class SudokuWizard():
 
 
 def main():
-    image = cv.imread('res/photos/sudoku/sudoku-puzzle-games.webp')
+    image = cv.imread('res/photos/sudoku/sudokuHouse.jpg')
 
     sw = SudokuWizard(image)
-    sw.get_sudoku()
-    sw.solve(True)
-    sw.show_solution()
+    sw.scan_image()
+    sw.extract_cells()
+    print(sw.extract_numbers(verbose=False, ocr=True))
 
 if __name__ == "__main__":
     main()
