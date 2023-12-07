@@ -7,4 +7,4 @@ import pandas as pd
 image = cv.imread('res/photos/sudoku/sudokuLibro1.jpeg')
 sw = SudokuWizard(image)
 
-sw.run()
+sw.run(verbose=False, ocr=False)

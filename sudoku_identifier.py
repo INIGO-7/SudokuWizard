@@ -2,6 +2,7 @@ import cv2 as cv
 import pandas as pd
 import numpy as np
 import os
+import re
 
 from typing import List
 from exceptions import SudokuDetectionError
@@ -12,7 +13,7 @@ from imutils import contours
 from skimage.segmentation import clear_border
 import easyocr
 
-from sudoku_algorithms import *
+from sudoku_algorithms import BFS, problemSudoku, printSudoku
 
 
 class SudokuWizard():
@@ -23,20 +24,30 @@ class SudokuWizard():
     This class uses image processing techniques to detect a Sudoku grid, extract each cell, 
     identify the numbers present, and return a 2D array representing the Sudoku puzzle.
 
+    Init parameters
+    ---------------
+
+        image : np.ndarray - The original sudoku image, in opencv format.
+        use_gpu : bool = False - Set to True to make some operations faster using a GPU instead of a CPU.
+
     Attributes
     ----------
 
-        TEMPLATES (List[np.ndarray]): A list containing nine number templates (1-9) for number recognition.
-        image (np.ndarray): The input image containing the Sudoku puzzle.
-        sudoku (np.ndarray): The processed image of the Sudoku grid.
-        sudoku_thresh (np.ndarray): Thresholded version of the Sudoku grid for cell extraction.
-        cell_arr (List[np.ndarray]): List of images of individual cells in the Sudoku grid.
-        cell_thresh_arr (List[np.ndarray]): List of thresholded images of individual cells.
-        cropped_cells (List[np.ndarray]): List of cropped cell images.
-        sudoku_arr (np.array): Array representing the numbers in the Sudoku grid.
+        TEMPLATES : List[np.ndarray] - A list containing nine number templates (1-9) for number recognition.
+        image : np.ndarray - The input image containing the Sudoku puzzle.
+        sudoku : np.ndarray - The cropped original image with just the Sudoku puzzle.
+        sudoku_thresh : np.ndarray - Thresholded version of the sudoku only with the grid, for cell extraction.
+        cells : List[np.ndarray] - List of images of individual cells in the Sudoku grid.
+        cells_bounding_box : 
+        sudoku_arr : np.array - Array representing the numbers in the Sudoku grid.
+        solution
+        font
+        font_color
+        ocr_reader
+        use_gpu
     """
 
-    def __init__(self, image : np.ndarray):
+    def __init__(self, image : np.ndarray, use_gpu : bool = False):
 
         # Get the number templates for template matching.
         self.TEMPLATES: List[np.ndarray] = [
@@ -61,6 +72,7 @@ class SudokuWizard():
         self.font_color = (8, 8, 161)  # Paint color
 
         self.ocr_reader = None
+        self.use_gpu = use_gpu
 
 
     def scan_image(self, verbose : bool = False) -> (np.ndarray, np.ndarray):
@@ -311,40 +323,12 @@ class SudokuWizard():
         if np.all(thresh == 255):
             return 0
         
-        # If there was something in the cell...
+        # If there was something in the cell, use ocr or template matching to determine what number is it.
         elif ocr:
             
-            result = self.ocr_reader.readtext(cell, low_text=0.2, link_threshold=0.2, allowlist=[str(num) for num in range(1,10)])
-            
-            if result == []:
-                
-                top, bottom, left, right = [50]*4  # or [5]*4 if you want 5 pixels
-
-                # Create the border with white color (255, 255, 255)
-                cell = cv.copyMakeBorder(cell, top, bottom, left, right, cv.BORDER_CONSTANT, value=[255, 255, 255])
-
-                # Convert to grayscale for simplicity; remove this line if working with a colored image
-                cell = cv.cvtColor(cell, cv.COLOR_BGR2GRAY)
-
-                # Adjust contrast - alpha: Contrast control (1.0-3.0), beta: Brightness control (0-100)
-                alpha = 1.5  # Contrast control (>1.0 increases contrast, <1.0 decreases contrast)
-                beta = 0     # No brightness adjustment
-
-                # Apply the contrast adjustment
-                cell = cv.convertScaleAbs(cell, alpha=alpha, beta=beta)
-
-                result = self.ocr_reader.readtext(cell, low_text=0.2, link_threshold=0.2, allowlist=[str(num) for num in range(1,10)])
-
-                cv.imshow("new cell", cell)
-                cv.waitKey(0)
-
-                if result == []:
-                    return None
-                else:
-                    return int(result[0][1])
-                
-            else:
-                return int(result[0][1])
+            result = self.ocr_reader.recognize(cell)[0][1]
+            result = re.search(r'\d', result).group()
+            return int(result)
 
         else:
 
@@ -355,14 +339,6 @@ class SudokuWizard():
             _, cell = cv.threshold(cell, 127, 255, cv.THRESH_BINARY)
             cell = cv.bitwise_not(cell)
             results = []
-
-            if verbose:
-                cv.imshow("Celda", cell)
-                cv.waitKey(0)
-
-            # if ocr:
-            #     result = self.ocr_reader.readtext(cell, allowlist=[str(num) for num in range(1,10)])
-            #     print(result)
 
             # --> Get just the number in cell
 
@@ -378,63 +354,70 @@ class SudokuWizard():
             new_width = rightmost - leftmost
             cell_ROI = cell[topmost:bottommost, leftmost:rightmost]
 
-            # if verbose:
-            #     cv.imshow("Region de interes de nuestra celda", cell_ROI)
-            #     cv.waitKey(0)
-
-            if not ocr:
-                for template in self.TEMPLATES:
-
-                    # We turn the image into grayscale if we have a coloured image
-                    if len(template.shape) == 3:
-                        template = cv.cvtColor(template, cv.COLOR_BGR2GRAY)
-
-                    # The same threshold applied to the cell is applied to the template 
-                    _, template = cv.threshold(template, 127, 255, cv.THRESH_BINARY)
-                    template = cv.bitwise_not(template)
-
-                    # --> Get just the number in template
-
-                    # Get extreme pixels of the template
-                    white_pixels = np.where(template == 255)
-                    topmost = np.min(white_pixels[0])
-                    bottommost = np.max(white_pixels[0])
-                    leftmost = np.min(white_pixels[1])
-                    rightmost = np.max(white_pixels[1])
-
-                    # Get the template's region of interest (ROI), which is the number
-                    template_ROI = template[topmost:bottommost, leftmost:rightmost]
-                    
-                    # --> Resize template to be the same size of the number, without maintaining original aspect ratio.
-                    # This gives a much better result than maintaining the aspect ratio.
-                    template_ROI = cv.resize(template_ROI, (new_width, new_height))
-
-                    if verbose:
-                        cv.imshow("Region de interes de nuestro template", template_ROI)
-                        cv.waitKey(0)
-
-                    result = cv.matchTemplate(cell_ROI, template_ROI, cv.TM_CCOEFF_NORMED)
-
-                    # Find the position of the best match
-                    _, max_val, _, _ = cv.minMaxLoc(result)
-                    results.append(max_val)
+            if verbose:
+                cv.imshow("Si, region de interes de nuestra celda", cell_ROI)
+                cv.waitKey(0)
             
-                    # Return the index+1 with the highest match ratio, which would be the template it resembles the most to.
-                    return results.index(max(results)) + 1
+            for template in self.TEMPLATES:
+
+                # We turn the image into grayscale if we have a coloured image
+                if len(template.shape) == 3:
+                    template = cv.cvtColor(template, cv.COLOR_BGR2GRAY)
+
+                # The same threshold applied to the cell is applied to the template 
+                _, template = cv.threshold(template, 127, 255, cv.THRESH_BINARY)
+                template = cv.bitwise_not(template)
+
+                # --> Get just the number in template
+
+                # Get extreme pixels of the template
+                white_pixels = np.where(template == 255)
+                topmost = np.min(white_pixels[0])
+                bottommost = np.max(white_pixels[0])
+                leftmost = np.min(white_pixels[1])
+                rightmost = np.max(white_pixels[1])
+
+                # Get the template's region of interest (ROI), which is the number
+                template_ROI = template[topmost:bottommost, leftmost:rightmost]
+                
+                # --> Resize template to be the same size of the number, without maintaining original aspect ratio.
+                # This gives a much better result than maintaining the aspect ratio.
+                template_ROI = cv.resize(template_ROI, (new_width, new_height))
+
+                if verbose:
+                    cv.imshow("Region de interes de nuestro template", template_ROI)
+                    cv.waitKey(0)
+
+                result = cv.matchTemplate(cell_ROI, template_ROI, cv.TM_CCOEFF_NORMED)
+
+                # Find the position of the best match
+                _, max_val, _, _ = cv.minMaxLoc(result)
+                results.append(max_val)
+                
+
+            # Return the index+1 with the highest match ratio, which would be the template it resembles the most to.
+            return results.index(max(results)) + 1
 
     def extract_numbers(self, verbose : bool = False, ocr : bool = False) -> np.array:
-
+        
         if ocr:
-            self.ocr_reader = easyocr.Reader(['en'], gpu=False)
+            #Load our ocr reader
+            self.ocr_reader = easyocr.Reader(['en'], gpu=self.use_gpu)
             
         for cell in self.cells:
-            self.sudoku_arr.append(self.get_cell_number(cell, verbose, ocr))
+
+            number = self.get_cell_number(cell, verbose=verbose, ocr=ocr)
+            if verbose: print(f'The number in this cell is: {number}')
+
+            self.sudoku_arr.append(number)
 
         self.sudoku_arr = np.array(self.sudoku_arr).reshape(9, 9)
+        
+        if verbose: print(self.sudoku_arr)
 
         return self.sudoku_arr
 
-    def get_sudoku(self, verbose : bool = False) -> pd.DataFrame:
+    def get_sudoku(self, verbose : bool = False, ocr : bool = False) -> pd.DataFrame:
         
         # Scan the image to get a cropped image with the sudoku
         self.scan_image(verbose=verbose)
@@ -443,7 +426,8 @@ class SudokuWizard():
         self.extract_cells(verbose=verbose)
 
         # Get all the numbers corresponding each cell, and return
-        return self.extract_numbers(verbose=verbose)
+        
+        return self.extract_numbers(verbose=verbose, ocr=ocr)
     
     def solve(self, verbose : bool = False):
 
@@ -511,10 +495,10 @@ class SudokuWizard():
         cv.waitKey(0)
         return solution_img
     
-    def run(self, verbose : bool = False):
+    def run(self, verbose : bool = False, ocr : bool = False):
 
         # Get the sudoku from the original image
-        self.get_sudoku(verbose=verbose)
+        self.get_sudoku(verbose=verbose, ocr=ocr)
 
         # Solve the obtained sudoku
         self.solve(verbose=verbose)
@@ -524,12 +508,14 @@ class SudokuWizard():
 
 
 def main():
-    image = cv.imread('res/photos/sudoku/sudokuHouse.jpg')
+    image = cv.imread('res/photos/sudoku/sudokuLibro1.jpeg')
 
     sw = SudokuWizard(image)
     sw.scan_image()
     sw.extract_cells()
-    print(sw.extract_numbers(verbose=False, ocr=True))
+    sw.extract_numbers(ocr=True, verbose=True)
+    sw.solve()
+    sw.show_solution()
 
 if __name__ == "__main__":
     main()
