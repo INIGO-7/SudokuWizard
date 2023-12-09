@@ -75,6 +75,22 @@ class SudokuWizard():
         self.use_gpu = use_gpu
 
 
+    def resize_if_large(self, image : np.ndarray, max_width : int, max_height : int, scale_factor : int = 0.9):
+
+        # Get image dimensions
+        height, width = image.shape[:2]
+
+        while(width > max_width or height > max_height):
+            # Calculate new dimensions
+            new_width = int(width * scale_factor)
+            new_height = int(height * scale_factor)
+
+            # Resize the image
+            image = cv.resize(image, (new_width, new_height), interpolation=cv.INTER_AREA)
+            height, width = image.shape[:2]
+
+        return image
+
     def scan_image(self, verbose : bool = False) -> (np.ndarray, np.ndarray):
 
         """
@@ -88,6 +104,9 @@ class SudokuWizard():
         Returns:
             tuple: A tuple containing the processed Sudoku image and its thresholded version.
         """
+
+        # Resize the image if it's too large
+        self.image = self.resize_if_large(self.image, 1920, 1080)
 
         # Convert the image to grayscale, then apply a threshold to get black and white details.
         gray = cv.cvtColor(self.image, cv.COLOR_BGR2GRAY)
@@ -490,7 +509,8 @@ class SudokuWizard():
                         self.font_color, 
                         font_thickness
                     )
-        
+                    
+        cv.destroyAllWindows()
         cv.imshow('Sudoku Solved', solution_img)
         cv.waitKey(0)
         return solution_img
