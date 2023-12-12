@@ -511,6 +511,7 @@ class SudokuWizard():
                     )
                     
         cv.destroyAllWindows()
+        cv.imshow('Original sudoku', self.image)
         cv.imshow('Sudoku Solved', solution_img)
         cv.waitKey(0)
         return solution_img
@@ -528,12 +529,12 @@ class SudokuWizard():
 
 
 def main():
-    image = cv.imread('res/photos/sudoku/sudokuLibro1.jpeg')
+    image = cv.imread('res/photos/sudoku/sudokuLibroSolved1.jpeg')
 
     sw = SudokuWizard(image)
-    sw.scan_image()
+    sw.scan_image(verbose=True)
     sw.extract_cells()
-    sw.extract_numbers(ocr=True, verbose=True)
+    sw.extract_numbers(ocr=True, verbose=False)
     sw.solve()
     sw.show_solution()
 
