@@ -49,6 +49,9 @@ class SudokuWizard():
 
     def __init__(self, image : np.ndarray, use_gpu : bool = False):
 
+        # CONSTANT DECLARATION
+
+        self.avg_sudoku_size = 500
         # Get the number templates for template matching.
         self.TEMPLATES: List[np.ndarray] = [
             cv.imread(f'res/photos/numbers/number{i}HQ_nomargin.jpg') 
@@ -110,6 +113,11 @@ class SudokuWizard():
 
         # Convert the image to grayscale, then apply a threshold to get black and white details.
         gray = cv.cvtColor(self.image, cv.COLOR_BGR2GRAY)
+
+        if verbose:
+            cv.imshow("Imagen en escala de grises", gray)
+            cv.waitKey(0)
+
         thresh = cv.adaptiveThreshold(gray, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 57, 12)
 
         if verbose:
@@ -151,27 +159,8 @@ class SudokuWizard():
             cv.imshow("Nos quedamos con los contornos identificados", blurred)
             cv.waitKey(0)
 
-        # Morphological closing again to try to connect the lines
-        closing_kernel = cv.getStructuringElement(cv.MORPH_RECT, (9, 9))
-        closed = cv.morphologyEx(blurred, cv.MORPH_CLOSE, closing_kernel)
-
-        if verbose:
-            cv.imshow("Cerramos huecos entre lineas, ahora mas agresivo", closed)
-            cv.waitKey(0)
-
-        # Fix vertical and horizontal lines to be more clear and well defined
-        vertical_kernel = cv.getStructuringElement(cv.MORPH_RECT, (1, 3))
-        fixed_img = cv.morphologyEx(closed, cv.MORPH_CLOSE, vertical_kernel, iterations=10)
-
-        horizontal_kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 1))
-        fixed_img = cv.morphologyEx(fixed_img, cv.MORPH_CLOSE, horizontal_kernel, iterations=10)
-
-        if verbose:
-            cv.imshow("Procesamos las lineas horizontales y verticales", fixed_img)
-            cv.waitKey(0)
-
         # find contours in the thresholded image and sort them by size in descending order
-        cnts = cv.findContours(fixed_img.copy(), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+        cnts = cv.findContours(blurred.copy(), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
         cnts = imutils.grab_contours(cnts)
         cnts = sorted(cnts, key=cv.contourArea, reverse=True)
 
@@ -204,7 +193,7 @@ class SudokuWizard():
         # apply a four point perspective transform to both the original image and black/white image to obtain a
         # top-down bird's eye view of the sudoku
         sudoku = four_point_transform(self.image, sudoku_contour.reshape(4, 2))
-        sudoku_thresh = four_point_transform(fixed_img, sudoku_contour.reshape(4, 2))
+        sudoku_thresh = four_point_transform(blurred, sudoku_contour.reshape(4, 2))
 
         if verbose:
             cv.imshow("Este es el sudoku identificado", sudoku)
@@ -214,8 +203,8 @@ class SudokuWizard():
             cv.imshow("Estas son las celdas identificadas", sudoku_thresh)
             cv.waitKey(0)
         
-        self.sudoku = sudoku
-        self.sudoku_thresh = sudoku_thresh
+        self.sudoku = self.resize_if_large(sudoku, 600, 600)
+        self.sudoku_thresh = self.resize_if_large(sudoku_thresh, 600, 600)
 
         # return a 2-tuple of the cropped sudoku in both RGB and B/W
         return (sudoku, sudoku_thresh)
@@ -256,27 +245,99 @@ class SudokuWizard():
             tuple: A tuple containing arrays of cell images and their thresholded versions.
         """
         
-
-        if self.sudoku_thresh is None:
+        # We have to scan the image first to get the cropped sudoku, so if sudoku_thresh is none, raise exception.
+        if self.sudoku is None:
             raise Exception(("function scan_image must be run first to extract the sudoku!!"))
 
+        # Convert the image to grayscale, then apply a threshold to get black and white details.
+        gray = cv.cvtColor(self.sudoku, cv.COLOR_BGR2GRAY)
+        clahe = cv.createCLAHE(clipLimit=0.5, tileGridSize=(8, 8))
+        clahe_image = clahe.apply(gray)
+
+        if verbose:
+            cv.imshow("Imagen ecualizada y en escala de grises", clahe_image)
+            cv.waitKey(0)
+        
+        thresh = cv.adaptiveThreshold(clahe_image, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 27, 8)
+
+        # thresh = cv.adaptiveThreshold(gray, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 57, 12)
+
+        if verbose:
+            cv.imshow("Sudoku en blanco y negro con adaptative threshold", thresh)
+            cv.waitKey(0)
+
+        # Make white lines thicker to identify them better
+        kernel = cv.getStructuringElement(cv.MORPH_RECT, (2, 2))  # adjust the kernel size
+        dilated = cv.dilate(thresh, kernel, iterations=1)  # adjust the number of iterations
+
+        if verbose:
+            cv.imshow("Dilatacion sutil de las lineas", dilated)
+            cv.waitKey(0)
+
+        # Morphological closing to connect lines (reduce gaps in lines)
+        closing_kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
+        closed = cv.morphologyEx(dilated, cv.MORPH_CLOSE, closing_kernel)
+
+        if verbose:
+            cv.imshow("Cerramos los huecos entre las lineas", closed)
+            cv.waitKey(0)
+
+        # Blur to reduce noise caused by dilating the content of the image (which could make noise more present)
+        blurred = cv.medianBlur(closed, 3)
+
+        if verbose:
+            cv.imshow("Quitamos el ruido creado hasta ahora", blurred)
+            cv.waitKey(0)
+        
+        cnt_area = blurred.shape[0] + blurred.shape[1]
+
+        # Filter out all numbers and noise to isolate only boxes
+        cnts = cv.findContours(blurred, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)[0]
+        for c in cnts:
+            area = cv.contourArea(c)
+            if area < cnt_area:
+                cv.drawContours(blurred, [c], -1, (0,0,0), -1)
+
+        if verbose:
+            cv.imshow("Nos quedamos con los contornos identificados", blurred)
+            cv.waitKey(0)
+
+        # Morphological closing again to try to connect the lines
+        closing_kernel = cv.getStructuringElement(cv.MORPH_RECT, (9, 9))
+        closed = cv.morphologyEx(blurred, cv.MORPH_CLOSE, closing_kernel)
+
+        if verbose:
+            cv.imshow("Cerramos huecos entre lineas, ahora mas agresivo", closed)
+            cv.waitKey(0)
+
+        # Fix vertical and horizontal lines to be more clear and well defined
+        vertical_kernel = cv.getStructuringElement(cv.MORPH_RECT, (1, 3))
+        fixed_img = cv.morphologyEx(closed, cv.MORPH_CLOSE, vertical_kernel, iterations=10)
+
+        horizontal_kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 1))
+        fixed_img = cv.morphologyEx(fixed_img, cv.MORPH_CLOSE, horizontal_kernel, iterations=10)
+
+        if verbose:
+            cv.imshow("Procesamos las lineas horizontales y verticales", fixed_img)
+            cv.waitKey(0)
+
         # Make white lines thicker to get the number without the cell that it is bounded by.
-        kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))  # adjust the kernel size
-        dilated = cv.dilate(self.sudoku_thresh, kernel, iterations=3)  # adjust the number of iterations
+        kernel = cv.getStructuringElement(cv.MORPH_RECT, (2, 2))  # adjust the kernel size
+        dilated = cv.dilate(fixed_img, kernel, iterations=1)  # adjust the number of iterations
 
         if verbose:
             cv.imshow("Sudoku con lineas dilatadas", dilated)
             cv.waitKey(0)
 
-        # Fix horizontal and vertical lines again, very important to reduce noise!
+        # Fix vertical and horizontal again to finish with the procedure
         vertical_kernel = cv.getStructuringElement(cv.MORPH_RECT, (1, 3))
-        vert_fixed = cv.morphologyEx(dilated, cv.MORPH_CLOSE, vertical_kernel, iterations=10)
+        fixed_img = cv.morphologyEx(dilated, cv.MORPH_CLOSE, vertical_kernel, iterations=10)
 
         horizontal_kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 1))
-        fixed_img = cv.morphologyEx(vert_fixed, cv.MORPH_CLOSE, horizontal_kernel, iterations=10)
+        fixed_img = cv.morphologyEx(fixed_img, cv.MORPH_CLOSE, horizontal_kernel, iterations=10)
 
         if verbose:
-            cv.imshow("Se corrigen las lineas horizontales y verticales preventivamente", fixed_img)
+            cv.imshow("Repasamos lineas horizontales y verticales otra vez", fixed_img)
             cv.waitKey(0)
 
         # Sort by top to bottom and each row by left to right
@@ -528,14 +589,14 @@ class SudokuWizard():
 
 
 def main():
-    image = cv.imread('res/photos/sudoku/sudokuLibro1.jpeg')
-
+    image = cv.imread('res/photos/sudoku/sudokuLibro4.jpeg')
+    cv.imshow('Imagen original', image)
+    cv.waitKey(0)
     sw = SudokuWizard(image)
     sw.scan_image()
     sw.extract_cells()
-    sw.extract_numbers(ocr=True, verbose=True)
-    sw.solve()
-    sw.show_solution()
+    sw.extract_numbers(ocr=False)
+    sw.solve(verbose=True)
 
 if __name__ == "__main__":
     main()
