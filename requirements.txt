@@ -1,0 +1,5 @@
+pandas
+imutils
+scipy
+scikit-image
+easyocr
