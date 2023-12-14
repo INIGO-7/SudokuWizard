@@ -405,9 +405,12 @@ class SudokuWizard():
         
         # If there was something in the cell, use ocr or template matching to determine what number is it.
         elif ocr:
-            
-            result = self.ocr_reader.recognize(cell)[0][1]
-            result = re.search(r'\d', result).group()
+            try:
+                result = self.ocr_reader.recognize(cell)[0][1]
+                result = re.search(r'\d', result).group()
+            except:
+                # We assume if no digits were found, that there wasn't a number...
+                result = 0
             return int(result)
 
         else:
@@ -572,6 +575,7 @@ class SudokuWizard():
                     )
                     
         cv.destroyAllWindows()
+        cv.imshow('Original sudoku', self.image)
         cv.imshow('Sudoku Solved', solution_img)
         cv.waitKey(0)
         return solution_img
@@ -590,13 +594,12 @@ class SudokuWizard():
 
 def main():
     image = cv.imread('res/photos/sudoku/sudokuLibro4.jpeg')
-    cv.imshow('Imagen original', image)
-    cv.waitKey(0)
     sw = SudokuWizard(image)
     sw.scan_image()
     sw.extract_cells()
-    sw.extract_numbers(ocr=False)
+    sw.extract_numbers(ocr=True, verbose=False)
     sw.solve(verbose=True)
+    sw.show_solution()
 
 if __name__ == "__main__":
     main()

@@ -19,9 +19,7 @@ def solve_all():
         sw = SudokuWizard(pic_cv)
         sw.run(verbose=False, ocr=True)
 
-picture = cv.imread(os.path.join(img_path, 'sudokulibro4.jpeg'))
-cv.imshow('Original image', picture)
-cv.waitKey(0)
+picture = cv.imread(os.path.join(img_path, 'sudokuLibro2.jpeg'))
 
 sw = SudokuWizard(picture)
-sw.run(verbose=False, ocr=False)
+sw.run(verbose=False, ocr=True)
