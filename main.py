@@ -20,7 +20,7 @@ def solve_all():
         sw = SudokuWizard(pic_cv)
         sw.run(verbose=False, ocr=True)
 
-picture = cv.imread(os.path.join(img_path, 'sudokuLibro9.jpeg'))
+picture = cv.imread(os.path.join(img_path, 'sudokuPerfecto.webp'))
 
 # First call without OCR
 sw = SudokuWizard(picture)
