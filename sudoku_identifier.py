@@ -5,7 +5,7 @@ import os
 import re
 
 from typing import List
-from exceptions import SudokuDetectionError
+from exceptions import CellDetectionError, SudokuSolutionError
 
 import imutils
 from imutils.perspective import four_point_transform
@@ -77,6 +77,19 @@ class SudokuWizard():
 
     def resize_if_large(self, image : np.ndarray, max_width : int, max_height : int, scale_factor : int = 0.9):
 
+        """
+        Resizes the image if it's larger than the specified maximum width and height.
+
+        Args:
+            image (np.ndarray): The input image to resize.
+            max_width (int): The maximum allowed width of the image.
+            max_height (int): The maximum allowed height of the image.
+            scale_factor (float): The factor by which to scale the image down each iteration.
+
+        Returns:
+            np.ndarray: The resized image.
+        """
+        
         # Get image dimensions
         height, width = image.shape[:2]
 
@@ -113,7 +126,7 @@ class SudokuWizard():
         thresh = cv.adaptiveThreshold(gray, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 57, 12)
 
         if verbose:
-            cv.imshow("Imagen en blanco y negro con adaptative threshold", thresh)
+            cv.imshow("Black and white image with adaptive threshold", thresh)
             cv.waitKey(0)
 
         # Make white lines thicker to identify them better
@@ -121,7 +134,7 @@ class SudokuWizard():
         dilated = cv.dilate(thresh, kernel, iterations=1)  # adjust the number of iterations
 
         if verbose:
-            cv.imshow("Dilatacion sutil de las lineas", dilated)
+            cv.imshow("Slight dilation of lines", dilated)
             cv.waitKey(0)
 
         # Morphological closing to connect lines (reduce gaps in lines)
@@ -129,14 +142,14 @@ class SudokuWizard():
         closed = cv.morphologyEx(dilated, cv.MORPH_CLOSE, closing_kernel)
 
         if verbose:
-            cv.imshow("Cerramos los huecos entre las lineas", closed)
+            cv.imshow("Close gaps between lines", closed)
             cv.waitKey(0)
 
         # Blur to reduce noise caused by dilating the content of the image (which could make noise more present)
         blurred = cv.medianBlur(closed, 3)
 
         if verbose:
-            cv.imshow("Quitamos el ruido creado hasta ahora", blurred)
+            cv.imshow("Remove noise created so far", blurred)
             cv.waitKey(0)
 
         # Filter out all numbers and noise to isolate only boxes
@@ -148,7 +161,7 @@ class SudokuWizard():
                 cv.drawContours(blurred, [c], -1, (0,0,0), -1)
 
         if verbose:
-            cv.imshow("Nos quedamos con los contornos identificados", blurred)
+            cv.imshow("Keep identified contours", blurred)
             cv.waitKey(0)
 
         # Morphological closing again to try to connect the lines
@@ -156,7 +169,7 @@ class SudokuWizard():
         closed = cv.morphologyEx(blurred, cv.MORPH_CLOSE, closing_kernel)
 
         if verbose:
-            cv.imshow("Cerramos huecos entre lineas, ahora mas agresivo", closed)
+            cv.imshow("Close gaps between lines, now more aggressive", closed)
             cv.waitKey(0)
 
         # Fix vertical and horizontal lines to be more clear and well defined
@@ -167,7 +180,7 @@ class SudokuWizard():
         fixed_img = cv.morphologyEx(fixed_img, cv.MORPH_CLOSE, horizontal_kernel, iterations=10)
 
         if verbose:
-            cv.imshow("Procesamos las lineas horizontales y verticales", fixed_img)
+            cv.imshow("Process horizontal and vertical lines", fixed_img)
             cv.waitKey(0)
 
         # find contours in the thresholded image and sort them by size in descending order
@@ -198,7 +211,7 @@ class SudokuWizard():
         if verbose:
             outline = self.image.copy()
             cv.drawContours(outline, [sudoku_contour], -1, (0, 255, 0), 2)
-            cv.imshow("Contorno del sudoku", outline)
+            cv.imshow("Sudoku outline", outline)
             cv.waitKey(0)
 
         # apply a four point perspective transform to both the original image and black/white image to obtain a
@@ -207,11 +220,11 @@ class SudokuWizard():
         sudoku_thresh = four_point_transform(fixed_img, sudoku_contour.reshape(4, 2))
 
         if verbose:
-            cv.imshow("Este es el sudoku identificado", sudoku)
+            cv.imshow("Identified sudoku", sudoku)
             cv.waitKey(0)
 
         if verbose:
-            cv.imshow("Estas son las celdas identificadas", sudoku_thresh)
+            cv.imshow("Identified cells", sudoku_thresh)
             cv.waitKey(0)
         
         self.sudoku = sudoku
@@ -224,6 +237,13 @@ class SudokuWizard():
 
         """
         This function returns an image that is cropped with a contour given by parameter.
+
+        Args:
+            image (np.ndarray): The input image to crop.
+            contour (np.ndarray): The contour used for cropping.
+
+        Returns:
+            np.ndarray: The cropped image.
         """
 
         # Find white pixels (the contour)
@@ -265,7 +285,7 @@ class SudokuWizard():
         dilated = cv.dilate(self.sudoku_thresh, kernel, iterations=3)  # adjust the number of iterations
 
         if verbose:
-            cv.imshow("Sudoku con lineas dilatadas", dilated)
+            cv.imshow("Sudoku with dilated lines", dilated)
             cv.waitKey(0)
 
         # Fix horizontal and vertical lines again, very important to reduce noise!
@@ -276,7 +296,7 @@ class SudokuWizard():
         fixed_img = cv.morphologyEx(vert_fixed, cv.MORPH_CLOSE, horizontal_kernel, iterations=10)
 
         if verbose:
-            cv.imshow("Se corrigen las lineas horizontales y verticales preventivamente", fixed_img)
+            cv.imshow("Horizontal and vertical lines corrected preventively", fixed_img)
             cv.waitKey(0)
 
         # Sort by top to bottom and each row by left to right
@@ -319,23 +339,35 @@ class SudokuWizard():
                 self.cells.append(cropped_cell)
 
                 if verbose:
-                    cv.imshow("Celda recortada", cropped_cell)
+                    cv.imshow("Cropped cell", cropped_cell)
                     cv.waitKey(150)
 
         if len(self.cells) != 81:
-            raise SudokuDetectionError(len(self.cells))
+            raise CellDetectionError(len(self.cells))
 
         return self.cells
 
 
     def get_cell_number(self, cell : np.ndarray, verbose : bool = False, ocr : bool = False):
 
+        """
+        Extracts the number from a cell using either OCR or template matching.
+
+        Args:
+            cell (np.ndarray): The input cell image.
+            verbose (bool): If True, displays intermediate steps for debugging.
+            ocr (bool): If True, uses OCR for number recognition; otherwise uses template matching.
+
+        Returns:
+            int: The recognized number in the cell, or 0 if the cell is empty.
+        """
+        
         # Threshold to show the number, or nothing if there is not a number in the cell
         gray = cv.cvtColor(cell, cv.COLOR_BGR2GRAY)
         _, thresh = cv.threshold(gray, 100, 255, cv.THRESH_BINARY)
 
         if verbose:
-            cv.imshow("Hay aqui un numero?", cell)
+            cv.imshow("Is there a number here?", cell)
             cv.waitKey(0)
 
         # If there wasn't any number (no white in cell), we return 0 (which represents an empty cell)
@@ -374,7 +406,7 @@ class SudokuWizard():
             cell_ROI = cell[topmost:bottommost, leftmost:rightmost]
 
             if verbose:
-                cv.imshow("Si, region de interes de nuestra celda", cell_ROI)
+                cv.imshow("Yes, get our cell's ROI", cell_ROI)
                 cv.waitKey(0)
             
             for template in self.TEMPLATES:
@@ -404,7 +436,7 @@ class SudokuWizard():
                 template_ROI = cv.resize(template_ROI, (new_width, new_height))
 
                 if verbose:
-                    cv.imshow("Region de interes de nuestro template", template_ROI)
+                    cv.imshow("Our template's ROI", template_ROI)
                     cv.waitKey(0)
 
                 result = cv.matchTemplate(cell_ROI, template_ROI, cv.TM_CCOEFF_NORMED)
@@ -418,6 +450,17 @@ class SudokuWizard():
             return results.index(max(results)) + 1
 
     def extract_numbers(self, verbose : bool = False, ocr : bool = False) -> np.array:
+
+        """
+        Extracts numbers from each cell in the Sudoku grid using either OCR or template matching.
+
+        Args:
+            verbose (bool): If True, displays intermediate steps for debugging.
+            ocr (bool): If True, uses OCR for number recognition; otherwise uses template matching.
+
+        Returns:
+            np.array: A 2D array representing the numbers in the Sudoku grid.
+        """
         
         if ocr:
             #Load our ocr reader
@@ -437,6 +480,17 @@ class SudokuWizard():
         return self.sudoku_arr
 
     def get_sudoku(self, verbose : bool = False, ocr : bool = False) -> pd.DataFrame:
+
+        """
+        Retrieves the Sudoku grid from the input image, extracts cells, and identifies numbers.
+
+        Args:
+            verbose (bool): If True, displays intermediate steps for debugging.
+            ocr (bool): If True, uses OCR for number recognition; otherwise uses template matching.
+
+        Returns:
+            pd.DataFrame: A DataFrame representing the Sudoku grid.
+        """
         
         # Scan the image to get a cropped image with the sudoku
         self.scan_image(verbose=verbose)
@@ -445,11 +499,17 @@ class SudokuWizard():
         self.extract_cells(verbose=verbose)
 
         # Get all the numbers corresponding each cell, and return
-        
         return self.extract_numbers(verbose=verbose, ocr=ocr)
     
     def solve(self, verbose : bool = False):
 
+        """
+        Solves the Sudoku puzzle using a BFS algorithm.
+
+        Args:
+            verbose (bool): If True, displays the initial and solved Sudoku states for debugging.
+        """
+        
         sudoku_df = pd.DataFrame(self.sudoku_arr)
         p = problemSudoku(sudoku_df)
 
@@ -466,6 +526,17 @@ class SudokuWizard():
         self.solution = sudoku_solved_df.values.flatten().reshape(9, 9)
     
     def get_font_size(self, width, height):
+
+        """
+        Calculates the font size and thickness based on cell dimensions.
+
+        Args:
+            width (int): The width of the cell.
+            height (int): The height of the cell.
+
+        Returns:
+            tuple: A tuple containing the font scale and thickness.
+        """
         
         # Base font scale
         base_font_scale = 1.0
@@ -483,7 +554,17 @@ class SudokuWizard():
 
     def show_solution(self):
 
+        """
+        Overlays the solved Sudoku numbers on the original Sudoku image.
+
+        Returns:
+            np.ndarray: The image with the solved Sudoku overlay.
+        """
+
         solution_img = self.sudoku.copy()
+
+        if np.any(self.solution == 0):
+            raise SudokuSolutionError()
 
         for row_idx in range(9):
             for cell_idx in range(9):
@@ -517,6 +598,17 @@ class SudokuWizard():
         return solution_img
     
     def run(self, verbose : bool = False, ocr : bool = False):
+
+        """
+        Executes the entire process of solving the Sudoku puzzle from an image.
+
+        Args:
+            verbose (bool): If True, displays intermediate steps for debugging.
+            ocr (bool): If True, uses OCR for number recognition; otherwise uses template matching.
+
+        Returns:
+            np.ndarray: The image with the solved Sudoku overlay.
+        """
 
         # Get the sudoku from the original image
         self.get_sudoku(verbose=verbose, ocr=ocr)
