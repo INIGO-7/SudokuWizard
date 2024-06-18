@@ -1,0 +1,1 @@
+from sudoku_wizard import SudokuWizard
