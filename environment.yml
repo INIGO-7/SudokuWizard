@@ -1,4 +1,4 @@
-name: ArtVision
+name: sudoku-wizard
 channels:
   - defaults
 dependencies:
@@ -116,4 +116,3 @@ dependencies:
       - validators==0.22.0
       - werkzeug==3.0.1
       - wrapt==1.14.1
-prefix: /home/guayo/anaconda3/envs/ArtVision

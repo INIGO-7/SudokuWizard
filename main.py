@@ -1,5 +1,5 @@
 from sudoku_algorithms import *
-from sudoku_identifier import SudokuWizard
+from sudoku_wizard import SudokuWizard
 import cv2 as cv
 import pandas as pd
 import time
@@ -23,4 +23,4 @@ img_path = os.path.join(res_path, 'sudokuLibro3.jpeg')
 
 sw = SudokuWizard()
 sw.load_image(img_path)
-sw.run(verbose=False, ocr=False)
+sw.run()

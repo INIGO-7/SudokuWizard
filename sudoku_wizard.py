@@ -16,7 +16,7 @@ from imutils import contours
 from skimage.segmentation import clear_border
 import easyocr
 
-from sudoku_algorithms import BFS, problemSudoku, printSudoku
+from sudoku_algorithms import DFS, problemSudoku, printSudoku
 
 
 class SudokuWizard():
@@ -574,7 +574,7 @@ class SudokuWizard():
             print("Initial state: ")
             printSudoku(p.initial_state)
         
-        sudoku_solved_df = BFS(p)["final_state"]["state"]
+        sudoku_solved_df = DFS(p)["final_state"]["state"]
 
         if verbose:
             print("Solved sudoku: ")
@@ -695,7 +695,7 @@ class SudokuWizard():
                 gpu_or_not = "using GPU" if self.use_gpu else "not using GPU"
                 print(f"Time taken for sw.run with artificial intelligence OCR {gpu_or_not}: {time_without_ocr:.4f} seconds")    
             else:
-                print(f"Time taken for sw.run with template matching OCR: {time_without_ocr:.4f} seconds")
+                print(f"Time taken for sw.run with template matching: {time_without_ocr:.4f} seconds")
 
         # Show the solution we have found and return it
         return self.show_solution()
