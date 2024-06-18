@@ -95,19 +95,17 @@ class SudokuWizard():
 
         # Define the animation pattern
         if not animation:
-            animation = ["|", "/", "-", "\\", "|", "/", "-", "\\", "|", "/", "-", "\\"]
-        
-        message_length = len(message)
-    
-        while not self.stop_animation:
-            for i in range(message_length + 1):
+            animation = ["|", "/", "-", "\\"]
+
+        for i in range(len(message) + 1):
                 if self.stop_animation:
                     break
                 # Display the message letter by letter
                 sys.stdout.write(f"\r{message[:i]}")
                 sys.stdout.flush()
                 time.sleep(0.1)  # Adjust the speed of the letter-by-letter effect here
-            
+    
+        while not self.stop_animation:
             for frame in animation:
                 if self.stop_animation:
                     break
@@ -117,7 +115,7 @@ class SudokuWizard():
                 time.sleep(0.1)  # Adjust the speed of the spinner animation here
         
         # Clean up the line after stopping the animation
-        sys.stdout.write("\rDone!          \n")
+        sys.stdout.write("\rFinished.          \n")
         sys.stdout.flush()
 
 
@@ -670,6 +668,7 @@ class SudokuWizard():
 
             # Solve the obtained sudoku
             self.solve(verbose=verbose)
+
         finally:
             # Stop the animation
             self.stop_animation = True
