@@ -1,8 +1,11 @@
 import cv2 as cv
 import pandas as pd
 import numpy as np
+import threading
 import os
 import re
+import sys
+import time
 
 from typing import List
 from exceptions import CellDetectionError, SudokuSolutionError
@@ -73,6 +76,49 @@ class SudokuWizard():
 
         self.ocr_reader = None
         self.use_gpu = use_gpu
+
+        # Flag to control the loading animation
+        self.stop_animation = False
+
+
+    def animate_message(self, message : str, animation : List = None):
+
+        """
+        Displays an animation in the terminal with the given message.
+
+        Args:
+            message (str): The base message to display alongside the spinner.
+            animation (List): Animation to perform after the message.
+
+        The spinner runs until the global flag `stop_animation` is set to `True`.
+        """
+
+        # Define the animation pattern
+        if not animation:
+            animation = ["|", "/", "-", "\\", "|", "/", "-", "\\", "|", "/", "-", "\\"]
+        
+        message_length = len(message)
+    
+        while not self.stop_animation:
+            for i in range(message_length + 1):
+                if self.stop_animation:
+                    break
+                # Display the message letter by letter
+                sys.stdout.write(f"\r{message[:i]}")
+                sys.stdout.flush()
+                time.sleep(0.1)  # Adjust the speed of the letter-by-letter effect here
+            
+            for frame in animation:
+                if self.stop_animation:
+                    break
+                # Print the message with the current frame of the spinner
+                sys.stdout.write(f"\r{message} {frame}")
+                sys.stdout.flush()
+                time.sleep(0.1)  # Adjust the speed of the spinner animation here
+        
+        # Clean up the line after stopping the animation
+        sys.stdout.write("\rDone!          \n")
+        sys.stdout.flush()
 
 
     def resize_if_large(self, image : np.ndarray, max_width : int, max_height : int, scale_factor : int = 0.9):
@@ -610,11 +656,34 @@ class SudokuWizard():
             np.ndarray: The image with the solved Sudoku overlay.
         """
 
-        # Get the sudoku from the original image
-        self.get_sudoku(verbose=verbose, ocr=ocr)
+        self.stop_animation = False
 
-        # Solve the obtained sudoku
-        self.solve(verbose=verbose)
+        # Start the animation in a separate thread
+        animation_thread = threading.Thread(target=self.animate_message, args=("--> Processing",))
+        animation_thread.start()
+
+        start_time = time.time()
+
+        try:
+            # Get the sudoku from the original image
+            self.get_sudoku(verbose=verbose, ocr=ocr)
+
+            # Solve the obtained sudoku
+            self.solve(verbose=verbose)
+        finally:
+            # Stop the animation
+            self.stop_animation = True
+            # Ensure the animation thread has finished
+            animation_thread.join()
+
+            end_time = time.time()
+            time_without_ocr = end_time - start_time
+
+            if ocr:
+                gpu_or_not = "using GPU" if self.use_gpu else "not using GPU"
+                print(f"Time taken for sw.run with artificial intelligence OCR {gpu_or_not}: {time_without_ocr:.4f} seconds")    
+            else:
+                print(f"Time taken for sw.run with template matching OCR: {time_without_ocr:.4f} seconds")
 
         # Show the solution we have found and return it
         return self.show_solution()
