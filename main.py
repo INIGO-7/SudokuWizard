@@ -4,24 +4,23 @@ import cv2 as cv
 import pandas as pd
 import time
 import os
+import re
 
-# Load the image and get the sudoku.
-img_path = 'res/photos/sudoku'
+res_path = 'res/photos/sudoku'
 
 def solve_all():
-    for pic in os.listdir(img_path):
-        
-        pic = os.path.join(img_path, pic)
-        pic_cv = cv.imread(pic)
-        cv.imshow('Original image', pic_cv)
-        cv.waitKey(0)
-        print(pic)
+    for path in os.listdir(res_path):
+        if not re.search(r'\.(jpg|jpeg|png|webp)$', path):
+            continue
 
-        sw = SudokuWizard(pic_cv)
+        sw = SudokuWizard()
+        sw.load_image(os.path.join(res_path, path))
         sw.run(verbose=False, ocr=True)
 
-picture = cv.imread(os.path.join(img_path, 'sudokuPerfecto.webp'))
 
-# First call without OCR
-sw = SudokuWizard(picture)
+# Load the image and get the sudoku.
+img_path = os.path.join(res_path, 'sudokuLibro3.jpeg')
+
+sw = SudokuWizard()
+sw.load_image(img_path)
 sw.run(verbose=False, ocr=False)

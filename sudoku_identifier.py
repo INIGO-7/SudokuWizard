@@ -50,7 +50,7 @@ class SudokuWizard():
         use_gpu
     """
 
-    def __init__(self, image : np.ndarray, use_gpu : bool = False):
+    def __init__(self, use_gpu : bool = False):
 
         # Get the number templates for template matching.
         self.TEMPLATES: List[np.ndarray] = [
@@ -62,11 +62,7 @@ class SudokuWizard():
         for idx, img in enumerate(self.TEMPLATES):
             if img is None:
                 raise FileNotFoundError(f"Number template {idx + 1} not found or failed to load.")
-            
-        if image is None:
-            raise FileNotFoundError("Source image not found or failed to load.")
 
-        self.image = image
         self.sudoku = None
         self.sudoku_thresh = None
         self.cells = []
@@ -82,6 +78,20 @@ class SudokuWizard():
 
         # Flag to control the loading animation
         self.stop_animation = False
+
+    def load_image(self, img_path : str):
+
+        """
+        Load an image containing a sudoku for detection
+
+        Args:
+            img_path (str): System path where the image to read is located
+        """
+
+        self.image = cv.imread(img_path)
+
+        if self.image is None:
+            raise FileNotFoundError("Source image not found or failed to load.")
 
 
     def animate_message(self, message : str, animation : List = None):
