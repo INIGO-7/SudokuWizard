@@ -62,6 +62,9 @@ class SudokuWizard():
         for idx, img in enumerate(self.TEMPLATES):
             if img is None:
                 raise FileNotFoundError(f"Number template {idx + 1} not found or failed to load.")
+            
+        if image is None:
+            raise FileNotFoundError("Source image not found or failed to load.")
 
         self.image = image
         self.sudoku = None
