@@ -2,13 +2,13 @@ import cv2 as cv
 import pandas as pd
 import numpy as np
 import threading
+import time
+import sys
 import os
 import re
-import sys
-import time
 
 from typing import List
-from exceptions import CellDetectionError, SudokuSolutionError
+from .exceptions import CellDetectionError, SudokuSolutionError  # Use relative imports
 
 import imutils
 from imutils.perspective import four_point_transform
@@ -16,7 +16,9 @@ from imutils import contours
 from skimage.segmentation import clear_border
 import easyocr
 
-from sudoku_algorithms import DFS, problemSudoku, printSudoku
+from .sudoku_algorithms import DFS, problemSudoku, printSudoku  # Use relative imports
+
+import importlib.resources as pkg_resources  # Use importlib.resources to access package data
 
 
 class SudokuWizard():
@@ -50,19 +52,17 @@ class SudokuWizard():
         use_gpu
     """
 
-    def __init__(self, use_gpu : bool = False):
+    def __init__(self, use_gpu: bool = False):
 
         # Get the number templates for template matching.
-        self.TEMPLATES: List[np.ndarray] = [
-            cv.imread(f'res/photos/numbers/number{i}HQ_nomargin.jpg') 
-            for i in range(1, 10)
-        ]
-
-        # Error handling in case any template isn't found, we have to stop.
-        for idx, img in enumerate(self.TEMPLATES):
-            if img is None:
-                raise FileNotFoundError(f"Number template {idx + 1} not found or failed to load.")
-
+        self.TEMPLATES = []
+        for i in range(1, 10):
+            with pkg_resources.path('SudokuWizard.res.photos.numbers', f'number{i}HQ_nomargin.jpg') as template_path:
+                img = cv.imread(str(template_path))
+                if img is None:
+                    raise FileNotFoundError(f"Number template {i} not found or failed to load.")
+                self.TEMPLATES.append(img)
+        
         self.sudoku = None
         self.sudoku_thresh = None
         self.cells = []

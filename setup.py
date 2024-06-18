@@ -2,8 +2,8 @@ from setuptools import setup, find_packages
 
 VERSION = '0.0.1'
 DESCRIPTION = 'Simple program to solve Sudoku puzzles only with the source image.'
-LONG_DESCRIPTION = """Sudoku Wizard is a Python project that digitizes and solves Sudoku puzzles 
-from images using advanced image processing techniques and OCR (Optical Character Recognition)."""
+LONG_DESCRIPTION = '''Sudoku Wizard is a Python project that digitizes and solves Sudoku puzzles 
+from images using advanced image processing techniques and OCR (Optical Character Recognition).'''
 
 # Read the contents of your README file
 with open("README.md", "r", encoding="utf-8") as fh:
@@ -13,12 +13,12 @@ setup(
     name='sudokuwizard',
     version=VERSION,
     author='G.Guillotine - (INIGO-7 on GitHub)',
+    author_email='your-email@example.com',  # Add your email here
     description=DESCRIPTION,
     long_description=long_description,
     long_description_content_type='text/markdown',  # This ensures the README.md file is parsed correctly
-    url='https://github.com/INIGO-7/SudokuWizard',  # Add your GitHub repository here
-    packages=find_packages(where="SudokuWizard"),
-    package_dir={"": "SudokuWizard"},
+    url='https://github.com/INIGO-7/sudokuwizard',  # Add your GitHub repository here
+    packages=find_packages(),
     install_requires=[
         'opencv-python',
         'pandas',
@@ -27,6 +27,10 @@ setup(
         'scikit-image',
         'easyocr',
     ],
+    package_data={
+        'SudokuWizard': ['res/photos/numbers/*.jpg'],
+    },
+    include_package_data=True,
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
