@@ -11,13 +11,27 @@ Sudoku Wizard is a Python project that digitizes and solves Sudoku puzzles from 
 - **Sudoku Solving**: Solves the extracted Sudoku puzzle using a DFS algorithm.
 - **Visualization**: Overlays the solution onto the original image.
 
-## Installation
+## Pip installation
 
-To install Sudoku Wizard, follow these steps:
+
+To install Sudoku Wizard via PyPI, we only need to use pip in the command line!
+
+(ensure you're in an environment that uses python 3.11)
+
+```bash
+pip install sudokuwizard
+```
+
+Now we're ready to use it!
+
+
+## GitHub Installation
+
+To install Sudoku Wizard via GitHub, follow these steps:
 
 ### Prerequisites
 
-- Python 3.8 or later
+- Python 3.11
 - Git
 
 ### Clone the Repository
@@ -49,8 +63,7 @@ conda activate sudoku-wizard
 Here's a quick example of how to use Sudoku Wizard:
 
 ```python
-import cv2 as cv
-from sudoku_wizard import SudokuWizard
+from SudokuWizard import SudokuWizard
 
 # Create a SudokuWizard instance
 sw = SudokuWizard()
@@ -58,7 +71,7 @@ sw = SudokuWizard()
 # Load your sudoku image (works with .jpg, .jpeg, .png and .webp; support for other extensions is unknown)
 sw.load_image('image.jpg')
 
-# Run the Sudoku digitalization and resolution process
+# Run the Sudoku digitalization and resolution process (this will automatically show the solution in a new window)
 sw.run()
 ```
 
@@ -85,5 +98,7 @@ Feel free to reach out if you have any questions or need further assistance!
 
 ---
 
-Enjoy solving Sudoku puzzles with Sudoku Wizard! 🧩✨
+**Enjoy solving Sudoku puzzles with Sudoku Wizard!**
+
+# 🪄
 
