@@ -11,51 +11,29 @@ Sudoku Wizard is a Python project that digitizes and solves Sudoku puzzles from 
 - **Sudoku Solving**: Solves the extracted Sudoku puzzle using a DFS algorithm.
 - **Visualization**: Overlays the solution onto the original image.
 
-## Pip installation
+## Installation
 
-
-To install Sudoku Wizard via PyPI, we only need to use pip in the command line!
-
-(ensure you're in an environment that uses python 3.11)
+Requires Python 3.10 or newer, on Windows, macOS or Linux.
 
 ```bash
-pip install sudokuwizard
+pip install sudokuwizard          # template matching (light, ~0.5 GB with dependencies)
+pip install "sudokuwizard[ocr]"   # also installs EasyOCR + PyTorch for --ocr mode (several GB)
 ```
 
-Now we're ready to use it!
-
-
-## GitHub Installation
-
-To install Sudoku Wizard via GitHub, follow these steps:
-
-### Prerequisites
-
-- Python 3.11
-- Git
-
-### Clone the Repository
+### From source
 
 ```bash
-git clone https://github.com/yourusername/SudokuWizard.git
+git clone https://github.com/INIGO-7/SudokuWizard.git
 cd SudokuWizard
+pip install -e ".[ocr]"
 ```
 
-### Using `requirements.txt`
-
-To install the dependencies using `pip`, run:
+## Command line
 
 ```bash
-pip install -r requirements.txt
-```
-
-### Using `environment.yml`
-
-To create a conda environment and install the dependencies, run:
-
-```bash
-conda env create -f environment.yml
-conda activate sudoku-wizard
+sudokuwizard photo.jpg                 # solve and show the result in a window
+sudokuwizard photo.jpg -o solved.png   # also save the solved image
+sudokuwizard photo.jpg --no-show -o solved.png   # servers / no display
 ```
 
 ## Usage
@@ -71,8 +49,9 @@ sw = SudokuWizard()
 # Load your sudoku image (works with .jpg, .jpeg, .png and .webp; support for other extensions is unknown)
 sw.load_image('image.jpg')
 
-# Run the Sudoku digitalization and resolution process (this will automatically show the solution in a new window)
-sw.run()
+# Run the Sudoku digitalization and resolution process.
+# Shows the solution in a window (pass show=False to skip) and returns the solved image.
+solved = sw.run()
 ```
 
 ## Project Structure
@@ -81,8 +60,7 @@ sw.run()
 - `sudoku_algorithms.py`: Contains various algorithms for solving Sudoku puzzles.
 - `exceptions.py`: Custom exceptions for error handling.
 - `res/photos/`: Contains template images for number recognition.
-- `requirements.txt`: Python dependencies.
-- `environment.yml`: Conda environment configuration.
+- `pyproject.toml`: Packaging metadata and dependencies.
 
 ## Contributing
 

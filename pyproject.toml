@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sudokuwizard"
+version = "0.1.0"
+description = "Solve Sudoku puzzles from a photo using image processing and OCR."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "G.Guillotine (INIGO-7 on GitHub)" }]
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "opencv-python-headless>=4.8",
+    "imutils>=0.5.4",
+    "scipy>=1.10",  # imutils.perspective imports scipy but does not declare it
+    "matplotlib>=3.7",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+]
+
+[project.optional-dependencies]
+ocr = ["easyocr>=1.7"]
+
+[project.scripts]
+sudokuwizard = "SudokuWizard.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/INIGO-7/SudokuWizard"
+
+[tool.setuptools]
+packages = ["SudokuWizard"]
+
+[tool.setuptools.package-data]
+SudokuWizard = ["res/photos/numbers/*HQ_nomargin.jpg"]
