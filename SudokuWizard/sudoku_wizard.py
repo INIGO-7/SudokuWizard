@@ -13,12 +13,33 @@ from .exceptions import CellDetectionError, SudokuSolutionError  # Use relative 
 import imutils
 from imutils.perspective import four_point_transform
 from imutils import contours
-from skimage.segmentation import clear_border
-import easyocr
 
 from .sudoku_algorithms import DFS, problemSudoku, printSudoku  # Use relative imports
 
-import importlib.resources as pkg_resources  # Use importlib.resources to access package data
+from importlib.resources import files
+
+_TEMPLATE_DIR = files("SudokuWizard").joinpath("res", "photos", "numbers")
+
+
+def _show(title, image, wait=0):
+    """Show an image in a window. Uses OpenCV's GUI if available, otherwise matplotlib."""
+    try:
+        cv.imshow(title, image)
+        cv.waitKey(wait)
+        return
+    except cv.error:
+        pass  # headless OpenCV build: no GUI support
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print(f"[SudokuWizard] Cannot display '{title}': no GUI available. "
+              "Use the returned image or save it with cv2.imwrite().")
+        return
+    plt.figure(title)
+    plt.imshow(cv.cvtColor(image, cv.COLOR_BGR2RGB) if image.ndim == 3 else image, cmap="gray")
+    plt.axis("off")
+    plt.title(title)
+    plt.show()
 
 
 class SudokuWizard():
@@ -57,11 +78,11 @@ class SudokuWizard():
         # Get the number templates for template matching.
         self.TEMPLATES = []
         for i in range(1, 10):
-            with pkg_resources.path('SudokuWizard.res.photos.numbers', f'number{i}HQ_nomargin.jpg') as template_path:
-                img = cv.imread(str(template_path))
-                if img is None:
-                    raise FileNotFoundError(f"Number template {i} not found or failed to load.")
-                self.TEMPLATES.append(img)
+            data = _TEMPLATE_DIR.joinpath(f'number{i}HQ_nomargin.jpg').read_bytes()
+            img = cv.imdecode(np.frombuffer(data, np.uint8), cv.IMREAD_COLOR)
+            if img is None:
+                raise FileNotFoundError(f"Number template {i} not found or failed to load.")
+            self.TEMPLATES.append(img)
         
         self.sudoku = None
         self.sudoku_thresh = None
@@ -183,31 +204,27 @@ class SudokuWizard():
         thresh = cv.adaptiveThreshold(gray, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 57, 12)
 
         if verbose:
-            cv.imshow("Black and white image with adaptive threshold", thresh)
-            cv.waitKey(0)
+            _show("Black and white image with adaptive threshold", thresh, wait=0)
 
         # Make white lines thicker to identify them better
         kernel = cv.getStructuringElement(cv.MORPH_RECT, (2, 2))  # adjust the kernel size
         dilated = cv.dilate(thresh, kernel, iterations=1)  # adjust the number of iterations
 
         if verbose:
-            cv.imshow("Slight dilation of lines", dilated)
-            cv.waitKey(0)
+            _show("Slight dilation of lines", dilated, wait=0)
 
         # Morphological closing to connect lines (reduce gaps in lines)
         closing_kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
         closed = cv.morphologyEx(dilated, cv.MORPH_CLOSE, closing_kernel)
 
         if verbose:
-            cv.imshow("Close gaps between lines", closed)
-            cv.waitKey(0)
+            _show("Close gaps between lines", closed, wait=0)
 
         # Blur to reduce noise caused by dilating the content of the image (which could make noise more present)
         blurred = cv.medianBlur(closed, 3)
 
         if verbose:
-            cv.imshow("Remove noise created so far", blurred)
-            cv.waitKey(0)
+            _show("Remove noise created so far", blurred, wait=0)
 
         # Filter out all numbers and noise to isolate only boxes
         cnts = cv.findContours(blurred, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
@@ -218,16 +235,14 @@ class SudokuWizard():
                 cv.drawContours(blurred, [c], -1, (0,0,0), -1)
 
         if verbose:
-            cv.imshow("Keep identified contours", blurred)
-            cv.waitKey(0)
+            _show("Keep identified contours", blurred, wait=0)
 
         # Morphological closing again to try to connect the lines
         closing_kernel = cv.getStructuringElement(cv.MORPH_RECT, (9, 9))
         closed = cv.morphologyEx(blurred, cv.MORPH_CLOSE, closing_kernel)
 
         if verbose:
-            cv.imshow("Close gaps between lines, now more aggressive", closed)
-            cv.waitKey(0)
+            _show("Close gaps between lines, now more aggressive", closed, wait=0)
 
         # Fix vertical and horizontal lines to be more clear and well defined
         vertical_kernel = cv.getStructuringElement(cv.MORPH_RECT, (1, 3))
@@ -237,8 +252,7 @@ class SudokuWizard():
         fixed_img = cv.morphologyEx(fixed_img, cv.MORPH_CLOSE, horizontal_kernel, iterations=10)
 
         if verbose:
-            cv.imshow("Process horizontal and vertical lines", fixed_img)
-            cv.waitKey(0)
+            _show("Process horizontal and vertical lines", fixed_img, wait=0)
 
         # find contours in the thresholded image and sort them by size in descending order
         cnts = cv.findContours(fixed_img.copy(), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
@@ -268,8 +282,7 @@ class SudokuWizard():
         if verbose:
             outline = self.image.copy()
             cv.drawContours(outline, [sudoku_contour], -1, (0, 255, 0), 2)
-            cv.imshow("Sudoku outline", outline)
-            cv.waitKey(0)
+            _show("Sudoku outline", outline, wait=0)
 
         # apply a four point perspective transform to both the original image and black/white image to obtain a
         # top-down bird's eye view of the sudoku
@@ -277,12 +290,10 @@ class SudokuWizard():
         sudoku_thresh = four_point_transform(fixed_img, sudoku_contour.reshape(4, 2))
 
         if verbose:
-            cv.imshow("Identified sudoku", sudoku)
-            cv.waitKey(0)
+            _show("Identified sudoku", sudoku, wait=0)
 
         if verbose:
-            cv.imshow("Identified cells", sudoku_thresh)
-            cv.waitKey(0)
+            _show("Identified cells", sudoku_thresh, wait=0)
         
         self.sudoku = sudoku
         self.sudoku_thresh = sudoku_thresh
@@ -342,8 +353,7 @@ class SudokuWizard():
         dilated = cv.dilate(self.sudoku_thresh, kernel, iterations=3)  # adjust the number of iterations
 
         if verbose:
-            cv.imshow("Sudoku with dilated lines", dilated)
-            cv.waitKey(0)
+            _show("Sudoku with dilated lines", dilated, wait=0)
 
         # Fix horizontal and vertical lines again, very important to reduce noise!
         vertical_kernel = cv.getStructuringElement(cv.MORPH_RECT, (1, 3))
@@ -353,8 +363,7 @@ class SudokuWizard():
         fixed_img = cv.morphologyEx(vert_fixed, cv.MORPH_CLOSE, horizontal_kernel, iterations=10)
 
         if verbose:
-            cv.imshow("Horizontal and vertical lines corrected preventively", fixed_img)
-            cv.waitKey(0)
+            _show("Horizontal and vertical lines corrected preventively", fixed_img, wait=0)
 
         # Sort by top to bottom and each row by left to right
         invert = 255 - fixed_img
@@ -396,8 +405,7 @@ class SudokuWizard():
                 self.cells.append(cropped_cell)
 
                 if verbose:
-                    cv.imshow("Cropped cell", cropped_cell)
-                    cv.waitKey(150)
+                    _show("Cropped cell", cropped_cell, wait=150)
 
         if len(self.cells) != 81:
             raise CellDetectionError(len(self.cells))
@@ -424,8 +432,7 @@ class SudokuWizard():
         _, thresh = cv.threshold(gray, 100, 255, cv.THRESH_BINARY)
 
         if verbose:
-            cv.imshow("Is there a number here?", cell)
-            cv.waitKey(0)
+            _show("Is there a number here?", cell, wait=0)
 
         # If there wasn't any number (no white in cell), we return 0 (which represents an empty cell)
         if np.all(thresh == 255):
@@ -463,8 +470,7 @@ class SudokuWizard():
             cell_ROI = cell[topmost:bottommost, leftmost:rightmost]
 
             if verbose:
-                cv.imshow("Yes, get our cell's ROI", cell_ROI)
-                cv.waitKey(0)
+                _show("Yes, get our cell's ROI", cell_ROI, wait=0)
             
             for template in self.TEMPLATES:
 
@@ -493,8 +499,7 @@ class SudokuWizard():
                 template_ROI = cv.resize(template_ROI, (new_width, new_height))
 
                 if verbose:
-                    cv.imshow("Our template's ROI", template_ROI)
-                    cv.waitKey(0)
+                    _show("Our template's ROI", template_ROI, wait=0)
 
                 result = cv.matchTemplate(cell_ROI, template_ROI, cv.TM_CCOEFF_NORMED)
 
@@ -521,6 +526,12 @@ class SudokuWizard():
         
         if ocr:
             #Load our ocr reader
+            try:
+                import easyocr
+            except ImportError as e:
+                raise ImportError(
+                    "OCR mode needs the optional OCR dependencies: pip install 'sudokuwizard[ocr]'"
+                ) from e
             self.ocr_reader = easyocr.Reader(['en'], gpu=self.use_gpu)
             
         for cell in self.cells:
@@ -648,13 +659,9 @@ class SudokuWizard():
                         font_thickness
                     )
                     
-        cv.destroyAllWindows()
-        cv.imshow('Original sudoku', self.image)
-        cv.imshow('Sudoku Solved', solution_img)
-        cv.waitKey(0)
         return solution_img
     
-    def run(self, verbose : bool = False, ocr : bool = False):
+    def run(self, verbose : bool = False, ocr : bool = False, show : bool = True):
 
         """
         Executes the entire process of solving the Sudoku puzzle from an image.
@@ -697,19 +704,10 @@ class SudokuWizard():
             else:
                 print(f"Time taken for sw.run with template matching: {time_without_ocr:.4f} seconds")
 
-        # Show the solution we have found and return it
-        return self.show_solution()
+        # Draw the solution, optionally display it, and return it
+        solution_img = self.show_solution()
+        if show:
+            _show('Sudoku Solved', solution_img)
+        return solution_img
 
 
-def main():
-    image = cv.imread('res/photos/sudoku/sudokuLibroSolved1.jpeg')
-
-    sw = SudokuWizard(image)
-    sw.scan_image(verbose=True)
-    sw.extract_cells()
-    sw.extract_numbers(ocr=True, verbose=False)
-    sw.solve()
-    sw.show_solution()
-
-if __name__ == "__main__":
-    main()
